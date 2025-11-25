@@ -31,7 +31,8 @@ export async function getStoryById(id) {
   const config = createRequestConfig('GET', `/api/stories/${id}`, null)
   
   const response = await request(`/api/stories/${id}`, config)
-  return response.data
+  // FastAPI 直接返回 StoryDetailResponse 对象，不是包装在 data 中
+  return response.data || response
 }
 
 /**

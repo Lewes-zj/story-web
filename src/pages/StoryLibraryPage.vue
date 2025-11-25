@@ -305,16 +305,24 @@ export default {
         generatingProgress.value = '正在获取故事信息...'
         
         // 1. 获取故事路径和详情
-        const [storyPathResponse, storyDetail] = await Promise.all([
-          storyApi.getStoryPath(selectedStoryId.value),
-          storyApi.getStoryById(selectedStoryId.value)
-        ])
+        let storyPathResponse, storyDetail
+        try {
+          [storyPathResponse, storyDetail] = await Promise.all([
+            storyApi.getStoryPath(selectedStoryId.value),
+            storyApi.getStoryById(selectedStoryId.value)
+          ])
+        } catch (error) {
+          console.error('获取故事信息时出错:', error)
+          throw new Error(`获取故事信息失败: ${error.message || '未知错误'}`)
+        }
         
         if (!storyDetail) {
-          throw new Error('获取故事信息失败')
+          console.error('storyDetail 为空:', storyDetail)
+          throw new Error('获取故事信息失败：故事详情为空')
         }
         
         if (!storyPathResponse || !storyPathResponse.story_path) {
+          console.error('storyPathResponse 无效:', storyPathResponse)
           throw new Error('获取故事文件路径失败，请检查故事配置')
         }
         
