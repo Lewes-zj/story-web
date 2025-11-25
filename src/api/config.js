@@ -93,6 +93,10 @@ export async function handleResponse(response) {
       if (response.status === 422 && data.detail) {
         errorMessage = parseValidationError(data.detail)
       } 
+      // 处理 409 冲突错误（重复请求）
+      else if (response.status === 409 && data.detail) {
+        errorMessage = typeof data.detail === 'string' ? data.detail : '请求正在处理中，请勿重复提交'
+      }
       // 处理其他错误格式
       else if (data.message) {
         errorMessage = data.message

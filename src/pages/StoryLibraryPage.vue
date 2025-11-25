@@ -288,11 +288,22 @@ export default {
     }
     
     const showConfirmDialog = (storyId) => {
+      // 如果正在处理中，不允许打开新的确认对话框
+      if (loading.value) {
+        console.log('正在处理中，请稍候')
+        return
+      }
       selectedStoryId.value = storyId
       showConfirm.value = true
     }
     
     const confirmGenerate = async () => {
+      // 防止重复提交
+      if (loading.value) {
+        console.log('正在处理中，请勿重复提交')
+        return
+      }
+      
       if (!selectedStoryId.value || !character.value || !user.value) {
         alert('请先登录并选择角色')
         return
@@ -358,23 +369,43 @@ export default {
         
         // 3. 第一步：调用处理情绪向量接口
         // 后端会自动从数据库查询 clean_input_audio，并使用固定的文本内容
-        const emoVectorResponse = await storyBookApi.processEmoVector(
-          parseInt(user.value.id),
-          parseInt(character.value.id)
-        )
+        let emoVectorResponse
+        try {
+          emoVectorResponse = await storyBookApi.processEmoVector(
+            parseInt(user.value.id),
+            parseInt(character.value.id)
+          )
+        } catch (error) {
+          console.error('处理情绪向量时出错:', error)
+          // 如果是409冲突错误（重复请求），提供友好提示
+          if (error.code === 409 || error.message?.includes('正在处理中')) {
+            throw new Error('该请求正在处理中，请勿重复提交')
+          }
+          throw new Error(`处理情绪向量失败: ${error.message || '未知错误'}`)
+        }
         
         if (!emoVectorResponse || !emoVectorResponse.generated_files || emoVectorResponse.generated_files.length === 0) {
-          throw new Error('处理情绪向量失败')
+          throw new Error('处理情绪向量失败：未生成任何结果')
         }
         
         generatingProgress.value = '情绪向量处理完成，正在生成有声故事书（第二步，可能需要几分钟）...'
         
         // 4. 第二步：调用生成有声故事书接口
-        const storyBookResponse = await storyBookApi.generateStoryBook(
-          parseInt(user.value.id),
-          parseInt(character.value.id),
-          storyPath
-        )
+        let storyBookResponse
+        try {
+          storyBookResponse = await storyBookApi.generateStoryBook(
+            parseInt(user.value.id),
+            parseInt(character.value.id),
+            storyPath
+          )
+        } catch (error) {
+          console.error('生成有声故事书时出错:', error)
+          // 如果是409冲突错误（重复请求），提供友好提示
+          if (error.code === 409 || error.message?.includes('正在处理中')) {
+            throw new Error('该请求正在处理中，请勿重复提交')
+          }
+          throw new Error(`生成有声故事书失败: ${error.message || '未知错误'}`)
+        }
         
         if (!storyBookResponse || !storyBookResponse.success) {
           throw new Error(storyBookResponse?.message || '生成有声故事书失败')
@@ -409,8 +440,18 @@ export default {
       } catch (error) {
         console.error('生成失败:', error)
         showGeneratingDialog.value = false
-        alert(error.message || '生成失败，请重试')
+        
+        // 根据错误类型提供不同的提示
+        let errorMessage = error.message || '生成失败，请重试'
+        if (error.message?.includes('正在处理中')) {
+          errorMessage = '该任务正在处理中，请勿重复提交。如果长时间无响应，请刷新页面后重试。'
+        } else if (error.message?.includes('超时')) {
+          errorMessage = '请求超时，处理可能需要更长时间。请稍后检查任务状态。'
+        }
+        
+        alert(errorMessage)
       } finally {
+        // 确保无论成功还是失败，都重置loading状态
         loading.value = false
         generatingProgress.value = ''
       }
