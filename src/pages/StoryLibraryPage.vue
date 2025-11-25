@@ -331,8 +331,24 @@ export default {
         
         generatingProgress.value = '正在获取角色音频信息...'
         
+        // 检查 token 是否存在
+        const token = localStorage.getItem('story_voice_token')
+        if (!token) {
+          throw new Error('未登录，请先登录')
+        }
+        
         // 2. 获取角色的 clean_input_audio 路径
-        const audioInfo = await characterApi.getCharacterAudio(character.value.id)
+        let audioInfo
+        try {
+          audioInfo = await characterApi.getCharacterAudio(character.value.id)
+        } catch (error) {
+          console.error('获取角色音频信息时出错:', error)
+          // 如果是认证错误，提供更友好的提示
+          if (error.code === 401) {
+            throw new Error('登录已过期，请重新登录')
+          }
+          throw new Error(`获取角色音频信息失败: ${error.message || '未知错误'}`)
+        }
         
         if (!audioInfo || !audioInfo.clean_input_audio) {
           throw new Error('角色音频文件不存在，请先为角色上传音频并等待处理完成')
