@@ -5,16 +5,12 @@ import { createRequestConfig, API_BASE_URL, handleResponse } from './config.js'
  * 处理情绪向量
  * @param {number} userId - 用户ID
  * @param {number} roleId - 角色ID
- * @param {string} cleanInputAudio - 清理后的输入音频路径
- * @param {string} text - 文本内容
  * @param {number} timeout - 超时时间（毫秒），默认15分钟
  */
-export async function processEmoVector(userId, roleId, cleanInputAudio, text, timeout = 15 * 60 * 1000) {
+export async function processEmoVector(userId, roleId, timeout = 15 * 60 * 1000) {
   const config = createRequestConfig('POST', '/emo_vector/process_emo_vector/', {
     user_id: userId,
-    role_id: roleId,
-    clean_input_audio: cleanInputAudio,
-    text: text
+    role_id: roleId
   }, true)
   
   // 创建带超时的请求

@@ -354,17 +354,13 @@ export default {
           throw new Error('角色音频文件不存在，请先为角色上传音频并等待处理完成')
         }
         
-        const cleanInputAudio = audioInfo.clean_input_audio
-        
         generatingProgress.value = '正在处理情绪向量（第一步，可能需要几分钟）...'
         
         // 3. 第一步：调用处理情绪向量接口
-        // 使用故事的前100个字符作为示例文本，实际应该使用完整故事文本
+        // 后端会自动从数据库查询 clean_input_audio，并使用固定的文本内容
         const emoVectorResponse = await storyBookApi.processEmoVector(
           parseInt(user.value.id),
-          parseInt(character.value.id),
-          cleanInputAudio,
-          storyText.substring(0, 100) // 使用故事的前100个字符作为示例文本
+          parseInt(character.value.id)
         )
         
         if (!emoVectorResponse || !emoVectorResponse.generated_files || emoVectorResponse.generated_files.length === 0) {
