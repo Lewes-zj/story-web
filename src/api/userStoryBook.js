@@ -15,7 +15,7 @@ export async function getUserStoryBooks(params = {}) {
   const queryString = queryParams.toString()
   const url = queryString ? `/api/user_story_books?${queryString}` : '/api/user_story_books'
   
-  const config = createRequestConfig('GET', url)
+  const config = createRequestConfig('GET', url, null, true)
   const response = await fetch(`${API_BASE_URL}${url}`, config)
   return await handleResponse(response)
 }
