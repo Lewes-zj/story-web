@@ -2,6 +2,7 @@ import { reactive, readonly } from 'vue'
 import { getUser } from './utils/auth.js'
 import * as storyApi from './api/story.js'
 import * as taskApi from './api/task.js'
+import * as userStoryBookApi from './api/userStoryBook.js'
 import { getAudioUrl } from './api/file.js'
 
 // 从 localStorage 恢复用户信息
@@ -11,11 +12,13 @@ const savedUser = getUser()
 const state = reactive({
   user: savedUser,
   character: null,
-  tasks: [],
+  tasks: [], // 兼容旧代码，虽然可能不再使用
+  userStoryBooks: [], // 新增：用户有声故事书列表
   stories: [],
   loading: {
     stories: false,
-    tasks: false
+    tasks: false,
+    userStoryBooks: false
   }
 })
 
@@ -37,8 +40,16 @@ const mutations = {
     state.tasks = tasks
   },
   
+  SET_USER_STORY_BOOKS(books) {
+    state.userStoryBooks = books
+  },
+
   ADD_TASK(task) {
     state.tasks.unshift(task) // 添加到数组开头
+  },
+
+  ADD_USER_STORY_BOOK(book) {
+    state.userStoryBooks.unshift(book)
   },
   
   UPDATE_TASK(taskId, updates) {
@@ -142,9 +153,37 @@ const actions = {
       mutations.SET_LOADING('tasks', false)
     }
   },
+
+  async loadUserStoryBooks(params = {}) {
+    try {
+      mutations.SET_LOADING('userStoryBooks', true)
+      const data = await userStoryBookApi.getUserStoryBooks(params)
+      
+      let books = []
+      if (data) {
+         if (Array.isArray(data)) {
+          books = data
+        } else if (data.list && Array.isArray(data.list)) {
+          books = data.list
+        }
+      }
+      mutations.SET_USER_STORY_BOOKS(books)
+      return books
+    } catch (error) {
+      console.error('加载用户故事书列表失败:', error)
+      mutations.SET_USER_STORY_BOOKS([])
+      throw error
+    } finally {
+      mutations.SET_LOADING('userStoryBooks', false)
+    }
+  },
   
   addTask(task) {
     mutations.ADD_TASK(task)
+  },
+
+  addUserStoryBook(book) {
+    mutations.ADD_USER_STORY_BOOK(book)
   },
   
   updateTask(taskId, updates) {
@@ -157,6 +196,7 @@ const actions = {
   
   // 轮询任务状态
   async pollTaskStatus(taskId) {
+
     try {
       const statusData = await taskApi.getTaskStatus(taskId)
       const status = statusData.status || statusData.data?.status

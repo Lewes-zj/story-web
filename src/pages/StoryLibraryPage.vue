@@ -396,6 +396,7 @@ export default {
           storyBookResponse = await storyBookApi.generateStoryBook(
             parseInt(user.value.id),
             parseInt(character.value.id),
+            parseInt(selectedStoryId.value),
             storyPath
           )
         } catch (error) {
@@ -413,20 +414,7 @@ export default {
         
         generatingProgress.value = '生成完成！'
         
-        // 5. 创建任务记录（用于在畅听页面显示）
-        const task = {
-          id: `task_${Date.now()}`,
-          storyId: selectedStoryId.value,
-          characterId: character.value.id,
-          status: 'completed',
-          audioUrl: storyBookResponse.story_book_path,
-          createdAt: new Date()
-        }
-        
-        // 添加到 store
-        store.actions.addTask(task)
-        
-        // 等待一下让用户看到完成消息
+        // 5. 等待一下让用户看到完成消息
         await new Promise(resolve => setTimeout(resolve, 1000))
         
         showGeneratingDialog.value = false

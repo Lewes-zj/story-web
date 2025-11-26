@@ -35,14 +35,16 @@ export async function processEmoVector(userId, roleId, timeout = 15 * 60 * 1000)
  * 生成有声故事书
  * @param {number} userId - 用户ID
  * @param {number} roleId - 角色ID
+ * @param {number} storyId - 故事ID
  * @param {string} storyPath - 故事文件路径
  * @param {boolean} keepTempFiles - 是否保留临时文件
  * @param {number} timeout - 超时时间（毫秒），默认15分钟
  */
-export async function generateStoryBook(userId, roleId, storyPath, keepTempFiles = false, timeout = 15 * 60 * 1000) {
+export async function generateStoryBook(userId, roleId, storyId, storyPath, keepTempFiles = false, timeout = 15 * 60 * 1000) {
   const config = createRequestConfig('POST', '/story_book/generate/', {
     user_id: userId,
     role_id: roleId,
+    story_id: storyId,
     story_path: storyPath,
     keep_temp_files: keepTempFiles
   }, true)

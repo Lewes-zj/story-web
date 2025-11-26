@@ -37,17 +37,12 @@
                 <span class="task-duration">{{ getStoryDuration(task.storyId) }}</span>
               </div>
               <div class="task-status">
-                <span 
-                  class="status-tag"
-                  :class="task.status"
-                >
-                  {{ task.status === 'generating' ? '生成中...' : '已完成' }}
-                </span>
+                <!-- 移除状态标签，因为现在只显示已生成的故事 -->
               </div>
             </div>
 
             <!-- 播放按钮 -->
-            <div v-if="task.status === 'completed'" class="play-button-container">
+            <div class="play-button-container">
               <button 
                 class="play-button"
                 :class="{ playing: isPlaying(task.id) }"
@@ -116,14 +111,14 @@ export default {
     let progressInterval = null
     
     const character = computed(() => store.state.character)
-    const tasks = computed(() => store.state.tasks)
+    const tasks = computed(() => store.state.userStoryBooks) // 使用用户故事书列表
     const stories = computed(() => store.state.stories)
     
     // 加载任务列表和故事列表
     onMounted(async () => {
       try {
-        // 加载任务列表
-        await store.actions.loadTasks()
+        // 加载用户故事书列表
+        await store.actions.loadUserStoryBooks()
         
         // 如果故事列表为空，加载故事列表
         if (stories.value.length === 0) {
@@ -185,16 +180,6 @@ export default {
       const task = tasks.value.find(t => t.id === taskId)
       if (!task) return
       
-      if (task.status === 'generating') {
-        alert('仍在生成中，请稍候')
-        return
-      }
-      
-      if (task.status !== 'completed') {
-        alert('任务尚未完成')
-        return
-      }
-      
       // 如果正在播放当前任务，则停止
       if (playingTaskId.value === taskId) {
         if (audioElement.value) {
@@ -224,14 +209,16 @@ export default {
       try {
         // 获取音频URL
         let audioUrl = null
-        if (task.audioUrl) {
-          // 如果已经是完整URL，直接使用
+        // UserStoryBookItem 结构中是 storyBookPath
+        if (task.storyBookPath) {
+          audioUrl = task.storyBookPath.startsWith('http') 
+            ? task.storyBookPath 
+            : getAudioUrl(task.storyBookPath)
+        } else if (task.audioUrl) {
+           // 兼容旧字段
           audioUrl = task.audioUrl.startsWith('http') 
             ? task.audioUrl 
             : getAudioUrl(task.audioUrl)
-        } else if (task.audioFileId) {
-          // 如果有文件ID，构建URL
-          audioUrl = getAudioUrl(task.audioFileId)
         }
         
         if (!audioUrl) {
