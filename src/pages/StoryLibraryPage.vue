@@ -72,7 +72,16 @@
                 <h3 class="story-title">{{ story.title }}</h3>
                 <p class="story-duration">时长：{{ formatDuration(story.duration) }}</p>
               </div>
+              
               <button 
+                v-if="isStoryGenerated(story.id)"
+                class="btn btn-success play-btn"
+                @click="goToListen(story.id)"
+              >
+                播放
+              </button>
+              <button 
+                v-else
                 class="btn btn-primary generate-btn"
                 @click="showConfirmDialog(story.id)"
               >
@@ -150,6 +159,7 @@ export default {
     const character = computed(() => store.state.character)
     const stories = computed(() => store.state.stories)
     const user = computed(() => store.state.user)
+    const userStoryBooks = computed(() => store.state.userStoryBooks)
     
     // 加载用户角色列表
     const loadUserCharacters = async () => {
@@ -243,6 +253,13 @@ export default {
           console.error('加载故事列表失败:', error)
         }
       }
+
+      // 加载用户故事书列表（用于判断故事是否已生成）
+      try {
+        await store.actions.loadUserStoryBooks()
+      } catch (error) {
+        console.error('加载用户故事书列表失败:', error)
+      }
     })
     
     const storiesByCategory = computed(() => {
@@ -263,6 +280,26 @@ export default {
       const story = stories.value.find(s => s.id === selectedStoryId.value)
       return story ? story.title : ''
     })
+
+    // 获取已生成的故事书任务
+    const getGeneratedTask = (storyId) => {
+      if (!userStoryBooks.value) return null
+      // 注意：确保ID类型一致，storyId可能是数字或字符串
+      return userStoryBooks.value.find(book => String(book.storyId) === String(storyId))
+    }
+
+    // 判断故事是否已生成
+    const isStoryGenerated = (storyId) => {
+      return !!getGeneratedTask(storyId)
+    }
+
+    // 跳转到畅听页面播放
+    const goToListen = (storyId) => {
+      const task = getGeneratedTask(storyId)
+      if (task) {
+        router.push({ path: '/listen', query: { playTaskId: task.id } })
+      }
+    }
     
     // 格式化时长：将秒数转换为 "N分N秒" 格式
     const formatDuration = (seconds) => {
@@ -460,7 +497,9 @@ export default {
       confirmGenerate,
       formatDuration,
       generatingProgress,
-      showGeneratingDialog
+      showGeneratingDialog,
+      isStoryGenerated,
+      goToListen
     }
   }
 }
@@ -827,6 +866,28 @@ export default {
     padding: 10px;
     font-size: 16px;
     width: auto;
+  }
+  
+  .play-btn {
+    width: 100%;
+    padding: 8px;
+    font-size: 14px;
+    border-radius: 6px;
+    background-color: #10b981; /* Green color for play button */
+    color: white;
+    border: none;
+  }
+  
+  .play-btn:hover {
+    background-color: #059669;
+  }
+
+  @media (min-width: 768px) {
+    .play-btn {
+      padding: 10px;
+      font-size: 16px;
+      width: auto;
+    }
   }
   
   .dialog-actions {

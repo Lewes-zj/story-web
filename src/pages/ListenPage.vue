@@ -95,16 +95,18 @@
 
 <script>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import store from '../store.js'
 import * as storyApi from '../api/story.js'
 import { getAudioUrl } from '../api/file.js'
+import { API_BASE_URL } from '../api/config.js'
 import { clearAuth } from '../utils/auth.js'
 
 export default {
   name: 'ListenPage',
   setup() {
     const router = useRouter()
+    const route = useRoute()
     const playingTaskId = ref(null)
     const playingProgress = ref(0)
     const audioElement = ref(null)
@@ -124,6 +126,23 @@ export default {
         if (stories.value.length === 0) {
           await store.actions.loadStories()
         }
+
+        // 检查是否需要自动播放
+        if (route.query.playTaskId) {
+          const taskId = parseInt(route.query.playTaskId)
+          const task = tasks.value.find(t => t.id === taskId)
+          if (task) {
+            // 稍微延迟一下，确保DOM更新完成，体验更好
+            setTimeout(() => {
+              togglePlay(taskId)
+              
+              // 滚动到对应的任务卡片
+              // 这里我们简单处理，如果能获取到元素的话
+              // const el = document.getElementById(`task-${taskId}`)
+              // if (el) el.scrollIntoView({ behavior: 'smooth' })
+            }, 500)
+          }
+        }
       } catch (error) {
         console.error('加载数据失败:', error)
         // 如果是token失效，清除认证信息并跳转到首页（登录页面）
@@ -140,11 +159,11 @@ export default {
       if (!playingTaskId.value) return null
       const task = tasks.value.find(t => t.id === playingTaskId.value)
       if (!task) return null
-      return stories.value.find(s => s.id === task.storyId)
+      return stories.value.find(s => String(s.id) === String(task.storyId))
     })
     
     const getStoryTitle = (storyId) => {
-      const story = stories.value.find(s => s.id === storyId)
+      const story = stories.value.find(s => String(s.id) === String(storyId))
       return story ? story.title : '未知故事'
     }
     
@@ -168,7 +187,7 @@ export default {
     }
     
     const getStoryDuration = (storyId) => {
-      const story = stories.value.find(s => s.id === storyId)
+      const story = stories.value.find(s => String(s.id) === String(storyId))
       return story ? formatDuration(story.duration) : ''
     }
     
@@ -211,9 +230,16 @@ export default {
         let audioUrl = null
         // UserStoryBookItem 结构中是 storyBookPath
         if (task.storyBookPath) {
-          audioUrl = task.storyBookPath.startsWith('http') 
-            ? task.storyBookPath 
-            : getAudioUrl(task.storyBookPath)
+          if (task.storyBookPath.startsWith('http')) {
+            audioUrl = task.storyBookPath
+          } else {
+            // 处理相对路径，指向后端挂载的静态目录
+            // 移除开头的 / (如果有)
+            const path = task.storyBookPath.startsWith('/') ? task.storyBookPath.slice(1) : task.storyBookPath
+            // 确保 baseUrl 不以 / 结尾
+            const cleanBaseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL
+            audioUrl = `${cleanBaseUrl}/${path}`
+          }
         } else if (task.audioUrl) {
            // 兼容旧字段
           audioUrl = task.audioUrl.startsWith('http') 
