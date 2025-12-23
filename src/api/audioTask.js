@@ -1,8 +1,5 @@
 // 音频任务相关 API
-import { createRequestConfig } from './config.js'
-
-// TTS API 基础地址 - FastAPI 服务运行在 8000 端口
-const TTS_API_BASE_URL = 'http://localhost:8000'
+import { createRequestConfig, API_BASE_URL } from './config.js'
 
 /**
  * 基于ID创建音频生成任务
@@ -16,7 +13,7 @@ const TTS_API_BASE_URL = 'http://localhost:8000'
 export async function createGenerationTaskByIds(data) {
   const config = createRequestConfig('POST', '/api/generate_by_ids', data, false)
   
-  const response = await fetch(`${TTS_API_BASE_URL}/api/generate_by_ids`, config)
+  const response = await fetch(`${API_BASE_URL}/api/generate_by_ids`, config)
   
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}))
@@ -35,7 +32,7 @@ export async function createGenerationTaskByIds(data) {
 export async function getTaskStatus(taskId) {
   const config = createRequestConfig('GET', `/api/task/${taskId}`, null, false)
   
-  const response = await fetch(`${TTS_API_BASE_URL}/api/task/${taskId}`, config)
+  const response = await fetch(`${API_BASE_URL}/api/task/${taskId}`, config)
   
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}))
