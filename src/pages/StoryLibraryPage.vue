@@ -46,18 +46,18 @@
       </div>
 
       <!-- 如果没有故事，显示提示 -->
-      <div v-if="storiesByCategory.length === 0" class="no-stories">
+      <div v-if="stories.length === 0" class="no-stories">
         <div class="no-stories-content">
           <p class="message">暂无故事数据</p>
           <p class="sub-message">请检查数据库是否有故事数据，或联系管理员添加故事</p>
         </div>
       </div>
 
-      <div v-for="categoryGroup in storiesByCategory" :key="categoryGroup.category" class="category-section">
-        <h2 class="category-title">{{ categoryGroup.category }}</h2>
+      <!-- 故事列表 -->
+      <div v-else class="stories-section">
         <div class="stories-grid">
           <div 
-            v-for="story in categoryGroup.stories" 
+            v-for="story in stories" 
             :key="story.id"
             class="story-card"
           >
@@ -135,12 +135,11 @@
 </template>
 
 <script>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import store, { startPollingTask } from '../store.js'
-import * as taskApi from '../api/task.js'
+import store from '../store.js'
+import * as audioTaskApi from '../api/audioTask.js'
 import * as characterApi from '../api/character.js'
-import * as storyBookApi from '../api/storyBook.js'
 import * as storyApi from '../api/story.js'
 import { clearAuth } from '../utils/auth.js'
 
@@ -155,6 +154,8 @@ export default {
     const allCharacters = ref([])
     const generatingProgress = ref('')
     const showGeneratingDialog = ref(false)
+    const currentTaskId = ref(null)
+    const pollingInterval = ref(null)
     
     const character = computed(() => store.state.character)
     const stories = computed(() => store.state.stories)
@@ -260,20 +261,19 @@ export default {
       } catch (error) {
         console.error('加载用户故事书列表失败:', error)
       }
+      
+      // 检查localStorage中是否有未完成的任务
+      checkAndRestoreTask()
     })
     
-    const storiesByCategory = computed(() => {
-      console.log('stories.value:', stories.value)
-      // 从故事列表中提取所有分类
-      if (!stories.value || stories.value.length === 0) {
-        return []
+    // 清理定时器
+    onUnmounted(() => {
+      if (pollingInterval.value) {
+        clearInterval(pollingInterval.value)
       }
-      const categories = [...new Set(stories.value.map(s => s.category || '其他'))]
-      return categories.map(cat => ({
-        category: cat,
-        stories: stories.value.filter(s => (s.category || '其他') === cat)
-      }))
     })
+    
+
     
     const selectedStoryTitle = computed(() => {
       if (!selectedStoryId.value) return ''
@@ -334,6 +334,146 @@ export default {
       showConfirm.value = true
     }
     
+    // localStorage相关
+    const TASK_STORAGE_KEY = 'story_generation_task'
+    const TASK_TIMEOUT_MS = 30 * 60 * 1000 // 30分钟超时
+    
+    // 保存任务到localStorage
+    const saveTaskToStorage = (taskId, storyId, characterId) => {
+      const taskData = {
+        taskId,
+        storyId,
+        characterId,
+        timestamp: Date.now()
+      }
+      localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(taskData))
+      console.log('任务已保存到localStorage:', taskData)
+    }
+    
+    // 从localStorage获取任务
+    const getTaskFromStorage = () => {
+      const data = localStorage.getItem(TASK_STORAGE_KEY)
+      if (!data) return null
+      
+      try {
+        return JSON.parse(data)
+      } catch (e) {
+        console.error('解析localStorage任务数据失败:', e)
+        return null
+      }
+    }
+    
+    // 清除localStorage中的任务
+    const clearTaskFromStorage = () => {
+      localStorage.removeItem(TASK_STORAGE_KEY)
+      console.log('已清除localStorage中的任务')
+    }
+    
+    // 开始轮询任务状态
+    const startTaskPolling = (taskId) => {
+      console.log('开始轮询任务状态:', taskId)
+      currentTaskId.value = taskId
+      
+      // 立即查询一次
+      pollTaskStatus(taskId)
+      
+      // 每5秒轮询一次
+      if (pollingInterval.value) {
+        clearInterval(pollingInterval.value)
+      }
+      
+      pollingInterval.value = setInterval(() => {
+        pollTaskStatus(taskId)
+      }, 5000)
+    }
+    
+    // 停止轮询
+    const stopTaskPolling = () => {
+      if (pollingInterval.value) {
+        clearInterval(pollingInterval.value)
+        pollingInterval.value = null
+      }
+      currentTaskId.value = null
+      console.log('已停止轮询')
+    }
+    
+    // 轮询任务状态
+    const pollTaskStatus = async (taskId) => {
+      try {
+        const taskStatus = await audioTaskApi.getTaskStatus(taskId)
+        
+        // 更新进度显示
+        if (taskStatus.progress) {
+          generatingProgress.value = taskStatus.progress
+        }
+        
+        console.log('任务状态:', taskStatus.status, '进度:', taskStatus.progress)
+        
+        // 检查是否完成或失败
+        if (taskStatus.status === 'completed') {
+          console.log('任务完成！')
+          stopTaskPolling()
+          clearTaskFromStorage()
+          showGeneratingDialog.value = false
+          generatingProgress.value = ''
+          
+          alert('生成成功！请前往畅听页面查看')
+          
+          // 刷新用户故事书列表
+          try {
+            await store.actions.loadUserStoryBooks()
+          } catch (error) {
+            console.error('刷新故事书列表失败:', error)
+          }
+        } else if (taskStatus.status === 'failed') {
+          console.error('任务失败:', taskStatus.error)
+          stopTaskPolling()
+          clearTaskFromStorage()
+          showGeneratingDialog.value = false
+          generatingProgress.value = ''
+          
+          alert(`生成失败: ${taskStatus.error || '未知错误'}`)
+        }
+      } catch (error) {
+        console.error('轮询任务状态失败:', error)
+        
+        // 如果是404错误，说明任务可能已被删除
+        if (error.message?.includes('404') || error.message?.includes('不存在')) {
+          console.warn('任务不存在，停止轮询')
+          stopTaskPolling()
+          clearTaskFromStorage()
+          showGeneratingDialog.value = false
+          generatingProgress.value = ''
+          alert('任务已不存在，可能已被删除')
+        }
+        // 其他错误继续轮询，可能是网络问题
+      }
+    }
+    
+    // 检查并恢复任务
+    const checkAndRestoreTask = () => {
+      const taskData = getTaskFromStorage()
+      
+      if (!taskData) {
+        return
+      }
+      
+      // 检查是否超时
+      const elapsed = Date.now() - taskData.timestamp
+      if (elapsed > TASK_TIMEOUT_MS) {
+        console.log('任务已超时，清除localStorage')
+        clearTaskFromStorage()
+        return
+      }
+      
+      console.log('发现未完成的任务，恢复轮询:', taskData)
+      
+      // 恢复弹窗和轮询
+      showGeneratingDialog.value = true
+      generatingProgress.value = '正在恢复任务状态...'
+      startTaskPolling(taskData.taskId)
+    }
+    
     const confirmGenerate = async () => {
       // 防止重复提交
       if (loading.value) {
@@ -350,142 +490,42 @@ export default {
         loading.value = true
         showConfirm.value = false
         showGeneratingDialog.value = true
-        generatingProgress.value = '正在获取故事信息...'
+        generatingProgress.value = '正在创建生成任务...'
         
-        // 1. 获取故事路径和详情
-        let storyPathResponse, storyDetail
-        try {
-          [storyPathResponse, storyDetail] = await Promise.all([
-            storyApi.getStoryPath(selectedStoryId.value),
-            storyApi.getStoryById(selectedStoryId.value)
-          ])
-        } catch (error) {
-          console.error('获取故事信息时出错:', error)
-          throw new Error(`获取故事信息失败: ${error.message || '未知错误'}`)
-        }
+        // 调用新的ID-based API
+        const response = await audioTaskApi.createGenerationTaskByIds({
+          story_id: selectedStoryId.value,
+          user_id: user.value.id,
+          role_id: character.value.id,
+          task_name: `故事${selectedStoryId.value}生成`
+        })
         
-        if (!storyDetail) {
-          console.error('storyDetail 为空:', storyDetail)
-          throw new Error('获取故事信息失败：故事详情为空')
-        }
+        console.log('任务创建成功:', response)
         
-        if (!storyPathResponse || !storyPathResponse.story_path) {
-          console.error('storyPathResponse 无效:', storyPathResponse)
-          throw new Error('获取故事文件路径失败，请检查故事配置')
-        }
+        const taskId = response.task_id
         
-        const storyPath = storyPathResponse.story_path
-        const storyText = storyDetail.content || storyDetail.text || '这是一个故事'
+        // 保存到localStorage
+        saveTaskToStorage(taskId, selectedStoryId.value, character.value.id)
         
-        generatingProgress.value = '正在获取角色音频信息...'
+        // 开始轮询
+        startTaskPolling(taskId)
         
-        // 检查 token 是否存在
-        const token = localStorage.getItem('story_voice_token')
-        if (!token) {
-          throw new Error('未登录，请先登录')
-        }
+        generatingProgress.value = '任务已创建，正在处理...'
         
-        // 2. 获取角色的 clean_input_audio 路径
-        let audioInfo
-        try {
-          audioInfo = await characterApi.getCharacterAudio(character.value.id)
-        } catch (error) {
-          console.error('获取角色音频信息时出错:', error)
-          // 如果是认证错误，提供更友好的提示
-          if (error.code === 401) {
-            throw new Error('登录已过期，请重新登录')
-          }
-          throw new Error(`获取角色音频信息失败: ${error.message || '未知错误'}`)
-        }
-        
-        if (!audioInfo || !audioInfo.clean_input_audio) {
-          throw new Error('角色音频文件不存在，请先为角色上传音频并等待处理完成')
-        }
-        
-        generatingProgress.value = '正在处理情绪向量（第一步，可能需要几分钟）...'
-        
-        // 3. 第一步：调用处理情绪向量接口
-        // 后端会自动从数据库查询 clean_input_audio，并使用固定的文本内容
-        let emoVectorResponse
-        try {
-          emoVectorResponse = await storyBookApi.processEmoVector(
-            parseInt(user.value.id),
-            parseInt(character.value.id)
-          )
-        } catch (error) {
-          console.error('处理情绪向量时出错:', error)
-          // 如果是409冲突错误（重复请求），提供友好提示
-          if (error.code === 409 || error.message?.includes('正在处理中')) {
-            throw new Error('该请求正在处理中，请勿重复提交')
-          }
-          throw new Error(`处理情绪向量失败: ${error.message || '未知错误'}`)
-        }
-        
-        if (!emoVectorResponse || !emoVectorResponse.generated_files || emoVectorResponse.generated_files.length === 0) {
-          throw new Error('处理情绪向量失败：未生成任何结果')
-        }
-        
-        generatingProgress.value = '情绪向量处理完成，正在生成有声故事书（第二步，可能需要几分钟）...'
-        
-        // 4. 第二步：调用生成有声故事书接口
-        let storyBookResponse
-        try {
-          storyBookResponse = await storyBookApi.generateStoryBook(
-            parseInt(user.value.id),
-            parseInt(character.value.id),
-            parseInt(selectedStoryId.value),
-            storyPath
-          )
-        } catch (error) {
-          console.error('生成有声故事书时出错:', error)
-          // 如果是409冲突错误（重复请求），提供友好提示
-          if (error.code === 409 || error.message?.includes('正在处理中')) {
-            throw new Error('该请求正在处理中，请勿重复提交')
-          }
-          throw new Error(`生成有声故事书失败: ${error.message || '未知错误'}`)
-        }
-        
-        if (!storyBookResponse || !storyBookResponse.success) {
-          throw new Error(storyBookResponse?.message || '生成有声故事书失败')
-        }
-        
-        generatingProgress.value = '生成完成！'
-        
-        // 5. 等待一下让用户看到完成消息
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        
-        showGeneratingDialog.value = false
-        selectedStoryId.value = null
-        
-        // 显示成功提示
-        alert('生成成功！请前往畅听页面查看')
-        
-        // 可选：跳转到畅听页面
-        // router.push('/listen')
       } catch (error) {
-        console.error('生成失败:', error)
+        console.error('创建生成任务失败:', error)
         showGeneratingDialog.value = false
         
-        // 根据错误类型提供不同的提示
-        let errorMessage = error.message || '生成失败，请重试'
-        if (error.message?.includes('正在处理中')) {
-          errorMessage = '该任务正在处理中，请勿重复提交。如果长时间无响应，请刷新页面后重试。'
-        } else if (error.message?.includes('超时')) {
-          errorMessage = '请求超时，处理可能需要更长时间。请稍后检查任务状态。'
-        }
-        
+        let errorMessage = error.message || '创建任务失败，请重试'
         alert(errorMessage)
       } finally {
-        // 确保无论成功还是失败，都重置loading状态
         loading.value = false
-        generatingProgress.value = ''
       }
     }
     
     return {
       character,
       stories,
-      storiesByCategory,
       selectedStoryTitle,
       showConfirm,
       selectedStoryId,
@@ -499,7 +539,9 @@ export default {
       generatingProgress,
       showGeneratingDialog,
       isStoryGenerated,
-      goToListen
+      goToListen,
+      currentTaskId,
+      pollingInterval
     }
   }
 }
@@ -663,15 +705,8 @@ export default {
   padding: 16px;
 }
 
-.category-section {
-  margin-bottom: 32px;
-}
-
-.category-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: #1f2937;
-  margin-bottom: 16px;
+.stories-section {
+  margin-bottom: 24px;
 }
 
 .stories-grid {

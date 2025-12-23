@@ -2,7 +2,7 @@
 import { request, createRequestConfig } from './config.js'
 
 /**
- * 获取故事列表
+ * 获取故事列表（从JSON文件）
  */
 export async function getStories(params = {}) {
   const { category, page = 1, size = 10 } = params
@@ -13,9 +13,9 @@ export async function getStories(params = {}) {
   queryParams.append('page', page)
   queryParams.append('size', size)
   
-  const config = createRequestConfig('GET', `/api/stories?${queryParams.toString()}`, null)
+  const config = createRequestConfig('GET', `/api/stories/json?${queryParams.toString()}`, null)
   
-  const response = await request(`/api/stories?${queryParams.toString()}`, config)
+  const response = await request(`/api/stories/json?${queryParams.toString()}`, config)
   // FastAPI可能直接返回StoryListResponse对象，也可能包装在data中
   // StoryListResponse包含: { stories: [], total: int, page: int, size: int }
   if (response && response.stories) {
@@ -24,16 +24,18 @@ export async function getStories(params = {}) {
   return response.data || response
 }
 
+
 /**
- * 获取故事详情
+ * 获取故事详情（从JSON文件）
  */
 export async function getStoryById(id) {
-  const config = createRequestConfig('GET', `/api/stories/${id}`, null)
+  const config = createRequestConfig('GET', `/api/stories/json/${id}`, null)
   
-  const response = await request(`/api/stories/${id}`, config)
+  const response = await request(`/api/stories/json/${id}`, config)
   // FastAPI 直接返回 StoryDetailResponse 对象，不是包装在 data 中
   return response.data || response
 }
+
 
 /**
  * 获取故事的JSON文件路径
