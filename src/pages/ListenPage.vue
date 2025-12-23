@@ -226,22 +226,21 @@ export default {
       
       // 开始播放新任务
       try {
-        // 获取音频URL
+        // 获取音频URL（优先使用后端返回的 outputUrl，其次 storyBookPath/audioUrl）
+        const cleanBaseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL
+        const toAbsolute = (p) => {
+          if (!p) return null
+          if (p.startsWith('http')) return p
+          const path = p.startsWith('/') ? p.slice(1) : p
+          return cleanBaseUrl ? `${cleanBaseUrl}/${path}` : `/${path}`
+        }
+
         let audioUrl = null
-        // UserStoryBookItem 结构中是 storyBookPath
-        if (task.storyBookPath) {
-          if (task.storyBookPath.startsWith('http')) {
-            audioUrl = task.storyBookPath
-          } else {
-            // 处理相对路径，指向后端挂载的静态目录
-            // 移除开头的 / (如果有)
-            const path = task.storyBookPath.startsWith('/') ? task.storyBookPath.slice(1) : task.storyBookPath
-            // 确保 baseUrl 不以 / 结尾
-            const cleanBaseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL
-            audioUrl = `${cleanBaseUrl}/${path}`
-          }
+        if (task.outputUrl) {
+          audioUrl = toAbsolute(task.outputUrl)
+        } else if (task.storyBookPath) {
+          audioUrl = toAbsolute(task.storyBookPath)
         } else if (task.audioUrl) {
-           // 兼容旧字段
           audioUrl = task.audioUrl.startsWith('http') 
             ? task.audioUrl 
             : getAudioUrl(task.audioUrl)
