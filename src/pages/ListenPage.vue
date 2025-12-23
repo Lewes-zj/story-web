@@ -67,7 +67,7 @@
                 :style="{ width: playingProgress + '%' }"
               ></div>
             </div>
-            <p class="progress-text">{{ Math.floor(playingProgress / 100 * 10) }}s / 10s</p>
+            <p class="progress-text">{{ formatTime(currentTime) }} / {{ formatTime(totalDuration) }}</p>
           </div>
         </div>
       </div>
@@ -110,6 +110,8 @@ export default {
     const playingTaskId = ref(null)
     const playingProgress = ref(0)
     const audioElement = ref(null)
+    const currentTime = ref(0)
+    const totalDuration = ref(0)
     let progressInterval = null
     
     const character = computed(() => store.state.character)
@@ -191,6 +193,14 @@ export default {
       return story ? formatDuration(story.duration) : ''
     }
     
+    // 格式化播放时间：将秒数转换为 "M:SS" 或 "MM:SS" 格式
+    const formatTime = (seconds) => {
+      if (!seconds || isNaN(seconds) || seconds < 0) return '0:00'
+      const mins = Math.floor(seconds / 60)
+      const secs = Math.floor(seconds % 60)
+      return `${mins}:${secs.toString().padStart(2, '0')}`
+    }
+    
     const isPlaying = (taskId) => {
       return playingTaskId.value === taskId
     }
@@ -207,6 +217,8 @@ export default {
         }
         playingTaskId.value = null
         playingProgress.value = 0
+        currentTime.value = 0
+        totalDuration.value = 0
         if (progressInterval) {
           clearInterval(progressInterval)
           progressInterval = null
@@ -255,10 +267,21 @@ export default {
         const audio = new Audio(audioUrl)
         audioElement.value = audio
         
+        // 等待元数据加载完成，获取音频时长
+        audio.addEventListener('loadedmetadata', () => {
+          if (audio.duration && isFinite(audio.duration)) {
+            totalDuration.value = audio.duration
+          }
+        })
+        
         // 更新进度
         audio.addEventListener('timeupdate', () => {
-          if (audio.duration) {
+          if (audio.duration && isFinite(audio.duration)) {
+            currentTime.value = audio.currentTime
             playingProgress.value = (audio.currentTime / audio.duration) * 100
+            if (!totalDuration.value) {
+              totalDuration.value = audio.duration
+            }
           }
         })
         
@@ -266,6 +289,8 @@ export default {
         audio.addEventListener('ended', () => {
           playingTaskId.value = null
           playingProgress.value = 0
+          currentTime.value = 0
+          totalDuration.value = 0
           if (progressInterval) {
             clearInterval(progressInterval)
             progressInterval = null
@@ -275,23 +300,62 @@ export default {
         
         // 错误处理
         audio.addEventListener('error', (e) => {
-          console.error('音频播放错误:', e)
-          alert('音频播放失败')
+          console.error('音频播放错误:', e, audio.error)
+          const errorMsg = audio.error ? `音频加载失败: ${audio.error.message || '未知错误'}` : '音频播放失败'
+          alert(errorMsg)
           playingTaskId.value = null
           playingProgress.value = 0
+          currentTime.value = 0
+          totalDuration.value = 0
           audioElement.value = null
         })
         
         playingTaskId.value = taskId
         playingProgress.value = 0
+        currentTime.value = 0
+        totalDuration.value = 0
+        
+        // 等待元数据加载后再播放
+        await new Promise((resolve, reject) => {
+          const onLoadedMetadata = () => {
+            audio.removeEventListener('loadedmetadata', onLoadedMetadata)
+            audio.removeEventListener('error', onError)
+            if (audio.duration && isFinite(audio.duration)) {
+              totalDuration.value = audio.duration
+            }
+            resolve()
+          }
+          const onError = (e) => {
+            audio.removeEventListener('loadedmetadata', onLoadedMetadata)
+            audio.removeEventListener('error', onError)
+            reject(e)
+          }
+          if (audio.readyState >= 1) {
+            // 元数据已加载
+            onLoadedMetadata()
+          } else {
+            audio.addEventListener('loadedmetadata', onLoadedMetadata)
+            audio.addEventListener('error', onError)
+            // 设置超时，避免无限等待
+            setTimeout(() => {
+              if (audio.readyState === 0) {
+                audio.removeEventListener('loadedmetadata', onLoadedMetadata)
+                audio.removeEventListener('error', onError)
+                reject(new Error('音频元数据加载超时'))
+              }
+            }, 5000)
+          }
+        })
         
         // 开始播放
         await audio.play()
       } catch (error) {
         console.error('播放音频失败:', error)
-        alert('播放音频失败')
+        alert(`播放音频失败: ${error.message || '未知错误'}`)
         playingTaskId.value = null
         playingProgress.value = 0
+        currentTime.value = 0
+        totalDuration.value = 0
         audioElement.value = null
       }
     }
@@ -312,9 +376,12 @@ export default {
       tasks,
       playingTaskId,
       playingProgress,
+      currentTime,
+      totalDuration,
       playingStory,
       getStoryTitle,
       getStoryDuration,
+      formatTime,
       isPlaying,
       togglePlay
     }
