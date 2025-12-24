@@ -23,25 +23,39 @@
 
     <!-- 故事分类（有角色时显示） -->
     <div v-else-if="!loadingCharacters && (allCharacters.length > 0 || character)" class="content-container">
-      <!-- 角色信息显示 -->
-      <div v-if="allCharacters.length > 0" class="character-info-section">
-        <div class="character-info">
-          <h3 class="character-info-title">当前角色</h3>
+      <!-- 角色选择器 -->
+      <div v-if="charactersWithAudio.length > 0" class="character-selector-section">
+        <div class="character-selector">
+          <h3 class="character-selector-title">选择角色生成故事</h3>
           <div class="characters-list">
             <div 
-              v-for="char in allCharacters" 
+              v-for="char in charactersWithAudio" 
               :key="char.id"
               class="character-item"
-              :class="{ active: character && character.id === char.id }"
+              :class="{ active: selectedCharacterId && selectedCharacterId === char.id }"
+              @click="selectCharacter(char)"
             >
               <span class="character-icon">🎤</span>
               <span class="character-name-text">{{ char.name }}</span>
-              <span v-if="character && character.id === char.id" class="current-badge">当前</span>
+              <span v-if="selectedCharacterId && selectedCharacterId === char.id" class="selected-badge">已选择</span>
             </div>
           </div>
-          <p v-if="allCharacters.length > 1" class="character-hint">
-            您有 {{ allCharacters.length }} 个角色，当前使用：{{ character.name }}
+          <p v-if="charactersWithAudio.length > 0" class="character-hint">
+            当前选择：{{ getSelectedCharacterName() }}
           </p>
+          <p v-if="charactersWithoutAudio.length > 0" class="character-warning">
+            <span class="warning-icon">⚠️</span>
+            有 {{ charactersWithoutAudio.length }} 个角色未上传录音，无法生成故事
+          </p>
+        </div>
+      </div>
+
+      <!-- 没有可用的角色（已上传录音） -->
+      <div v-else-if="!loadingCharacters && allCharacters.length > 0 && charactersWithAudio.length === 0" class="no-available-character">
+        <div class="no-available-character-content">
+          <p class="message">没有可用的角色</p>
+          <p class="sub-message">您创建的角色都还没有上传录音，请先返回首页为角色上传录音</p>
+          <button class="btn btn-primary" @click="goToHome">返回首页</button>
         </div>
       </div>
 
@@ -102,7 +116,7 @@
         <div class="dialog-body">
           <div class="confirm-message">
             <p>
-              用<span class="character-name">【{{ character.name }}】</span>
+              用<span class="character-name">【{{ getSelectedCharacterName() }}】</span>
               的声音生成
               <span class="story-name">《{{ selectedStoryTitle }}》</span>
               ，开始生成后无法取消，请确认。
@@ -125,7 +139,12 @@
         <div class="dialog-body">
           <div class="generating-message">
             <div class="loading-spinner"></div>
-            <p class="progress-text">{{ generatingProgress || '正在处理，请稍候...' }}</p>
+            <div class="progress-bar-container">
+              <div class="progress-bar">
+                <div class="progress-bar-fill" :style="{ width: progressPercentage + '%' }"></div>
+              </div>
+              <p class="progress-percentage">{{ progressPercentage }}%</p>
+            </div>
             <p class="progress-hint">此过程可能需要较长时间（约10分钟），请耐心等待，不要关闭页面</p>
           </div>
         </div>
@@ -152,10 +171,15 @@ export default {
     const loading = ref(false)
     const loadingCharacters = ref(false)
     const allCharacters = ref([])
+    const charactersWithAudio = ref([])
+    const charactersWithoutAudio = ref([])
+    const selectedCharacterId = ref(null)
+    const checkingAudio = ref(false)
     const generatingProgress = ref('')
     const showGeneratingDialog = ref(false)
     const currentTaskId = ref(null)
     const pollingInterval = ref(null)
+    const progressPercentage = ref(0)
     
     const character = computed(() => store.state.character)
     const stories = computed(() => store.state.stories)
@@ -192,28 +216,53 @@ export default {
         if (characters && Array.isArray(characters)) {
           allCharacters.value = characters
           
+          // 检查每个角色是否有录音
+          await checkCharactersAudio(characters)
+          
           // 如果用户有角色，确保store中有角色信息
           if (characters.length > 0) {
             console.log('找到角色，数量:', characters.length)
-            // 如果store中没有角色，设置第一个角色
+            // 如果store中没有角色，且有可用角色，设置第一个可用角色
             if (!character.value) {
-              console.log('store中没有角色，设置第一个角色:', characters[0])
-              store.actions.setCharacter(characters[0])
+              if (charactersWithAudio.value.length > 0) {
+                console.log('store中没有角色，设置第一个有录音的角色:', charactersWithAudio.value[0])
+                store.actions.setCharacter(charactersWithAudio.value[0])
+                selectedCharacterId.value = charactersWithAudio.value[0].id
+              } else {
+                console.log('没有有录音的角色')
+                store.actions.setCharacter(characters[0])
+              }
             }
-            // 如果store中的角色不在列表中，更新为第一个角色
+            // 如果store中的角色不在列表中，更新为第一个有录音的角色
             else {
               const currentCharInList = characters.find(c => c.id === character.value.id)
               if (!currentCharInList) {
-                console.log('store中的角色不在列表中，更新为第一个角色:', characters[0])
-                store.actions.setCharacter(characters[0])
+                if (charactersWithAudio.value.length > 0) {
+                  console.log('store中的角色不在列表中，更新为第一个有录音的角色:', charactersWithAudio.value[0])
+                  store.actions.setCharacter(charactersWithAudio.value[0])
+                  selectedCharacterId.value = charactersWithAudio.value[0].id
+                }
               } else {
-                console.log('store中的角色在列表中，保持当前角色')
+                // 检查当前角色是否有录音
+                const hasAudio = charactersWithAudio.value.some(c => c.id === character.value.id)
+                if (hasAudio) {
+                  selectedCharacterId.value = character.value.id
+                  console.log('当前角色有录音，保持当前角色')
+                } else if (charactersWithAudio.value.length > 0) {
+                  // 当前角色没有录音，切换到第一个有录音的角色
+                  console.log('当前角色没有录音，切换到第一个有录音的角色:', charactersWithAudio.value[0])
+                  store.actions.setCharacter(charactersWithAudio.value[0])
+                  selectedCharacterId.value = charactersWithAudio.value[0].id
+                }
               }
             }
           } else {
             console.log('没有找到角色')
             // 如果没有角色，清空store中的角色信息
             allCharacters.value = []
+            charactersWithAudio.value = []
+            charactersWithoutAudio.value = []
+            selectedCharacterId.value = null
             if (character.value) {
               store.actions.setCharacter(null)
             }
@@ -221,6 +270,9 @@ export default {
         } else {
           console.log('角色数据格式不正确:', response)
           allCharacters.value = []
+          charactersWithAudio.value = []
+          charactersWithoutAudio.value = []
+          selectedCharacterId.value = null
           if (character.value) {
             store.actions.setCharacter(null)
           }
@@ -273,7 +325,45 @@ export default {
       }
     })
     
-
+    // 检查角色是否有录音
+    const checkCharactersAudio = async (characters) => {
+      checkingAudio.value = true
+      charactersWithAudio.value = []
+      charactersWithoutAudio.value = []
+      
+      for (const char of characters) {
+        try {
+          const audioInfo = await characterApi.getCharacterAudio(char.id)
+          // 如果clean_input_audio或init_input存在，说明有录音
+          if (audioInfo && (audioInfo.clean_input_audio || audioInfo.init_input)) {
+            charactersWithAudio.value.push(char)
+          } else {
+            charactersWithoutAudio.value.push(char)
+          }
+        } catch (error) {
+          console.error(`检查角色 ${char.id} 的音频失败:`, error)
+          // 如果查询失败，认为是无录音
+          charactersWithoutAudio.value.push(char)
+        }
+      }
+      
+      checkingAudio.value = false
+      console.log('有录音的角色:', charactersWithAudio.value.length)
+      console.log('无录音的角色:', charactersWithoutAudio.value.length)
+    }
+    
+    // 选择角色
+    const selectCharacter = (char) => {
+      selectedCharacterId.value = char.id
+      store.actions.setCharacter(char)
+    }
+    
+    // 获取选中的角色名称
+    const getSelectedCharacterName = () => {
+      if (!selectedCharacterId.value) return '未选择'
+      const selected = charactersWithAudio.value.find(c => c.id === selectedCharacterId.value)
+      return selected ? selected.name : '未选择'
+    }
     
     const selectedStoryTitle = computed(() => {
       if (!selectedStoryId.value) return ''
@@ -330,6 +420,13 @@ export default {
         console.log('正在处理中，请稍候')
         return
       }
+      
+      // 检查是否选择了角色
+      if (!selectedCharacterId.value) {
+        alert('请先选择一个角色')
+        return
+      }
+      
       selectedStoryId.value = storyId
       showConfirm.value = true
     }
@@ -402,12 +499,28 @@ export default {
       try {
         const taskStatus = await audioTaskApi.getTaskStatus(taskId)
         
-        // 更新进度显示
-        if (taskStatus.progress) {
-          generatingProgress.value = taskStatus.progress
+        // 计算进度百分比
+        if (taskStatus.current_step !== undefined && taskStatus.total_steps) {
+          // 根据当前步骤计算百分比
+          // 如果已完成，显示100%
+          if (taskStatus.status === 'completed') {
+            progressPercentage.value = 100
+          } else {
+            // 根据步骤计算：已完成步骤数 / 总步骤数 * 100
+            // 当前步骤从1开始，所以已完成步骤数是 current_step - 1
+            const completedSteps = Math.max(0, taskStatus.current_step - 1)
+            progressPercentage.value = Math.min(99, Math.round((completedSteps / taskStatus.total_steps) * 100))
+          }
+        } else if (taskStatus.status === 'pending') {
+          progressPercentage.value = 0
+        } else if (taskStatus.status === 'processing') {
+          // 如果没有步骤信息，根据状态估算
+          progressPercentage.value = progressPercentage.value > 0 ? progressPercentage.value : 10
+        } else if (taskStatus.status === 'completed') {
+          progressPercentage.value = 100
         }
         
-        console.log('任务状态:', taskStatus.status, '进度:', taskStatus.progress)
+        console.log('任务状态:', taskStatus.status, '进度百分比:', progressPercentage.value)
         
         // 检查是否完成或失败
         if (taskStatus.status === 'completed') {
@@ -416,6 +529,7 @@ export default {
           clearTaskFromStorage()
           showGeneratingDialog.value = false
           generatingProgress.value = ''
+          progressPercentage.value = 0
           
           alert('生成成功！请前往畅听页面查看')
           
@@ -431,6 +545,7 @@ export default {
           clearTaskFromStorage()
           showGeneratingDialog.value = false
           generatingProgress.value = ''
+          progressPercentage.value = 0
           
           alert(`生成失败: ${taskStatus.error || '未知错误'}`)
         }
@@ -444,6 +559,7 @@ export default {
           clearTaskFromStorage()
           showGeneratingDialog.value = false
           generatingProgress.value = ''
+          progressPercentage.value = 0
           alert('任务已不存在，可能已被删除')
         }
         // 其他错误继续轮询，可能是网络问题
@@ -470,7 +586,7 @@ export default {
       
       // 恢复弹窗和轮询
       showGeneratingDialog.value = true
-      generatingProgress.value = '正在恢复任务状态...'
+      progressPercentage.value = 0
       startTaskPolling(taskData.taskId)
     }
     
@@ -481,8 +597,15 @@ export default {
         return
       }
       
-      if (!selectedStoryId.value || !character.value || !user.value) {
+      if (!selectedStoryId.value || !selectedCharacterId.value || !user.value) {
         alert('请先登录并选择角色')
+        return
+      }
+      
+      // 确认选中的角色有录音
+      const selectedChar = charactersWithAudio.value.find(c => c.id === selectedCharacterId.value)
+      if (!selectedChar) {
+        alert('请选择一个已上传录音的角色')
         return
       }
       
@@ -490,13 +613,13 @@ export default {
         loading.value = true
         showConfirm.value = false
         showGeneratingDialog.value = true
-        generatingProgress.value = '正在创建生成任务...'
+        progressPercentage.value = 0
         
         // 调用新的ID-based API
         const response = await audioTaskApi.createGenerationTaskByIds({
           story_id: selectedStoryId.value,
           user_id: user.value.id,
-          role_id: character.value.id,
+          role_id: selectedCharacterId.value,
           task_name: `故事${selectedStoryId.value}生成`
         })
         
@@ -505,12 +628,10 @@ export default {
         const taskId = response.task_id
         
         // 保存到localStorage
-        saveTaskToStorage(taskId, selectedStoryId.value, character.value.id)
+        saveTaskToStorage(taskId, selectedStoryId.value, selectedCharacterId.value)
         
         // 开始轮询
         startTaskPolling(taskId)
-        
-        generatingProgress.value = '任务已创建，正在处理...'
         
       } catch (error) {
         console.error('创建生成任务失败:', error)
@@ -532,6 +653,10 @@ export default {
       loading,
       loadingCharacters,
       allCharacters,
+      charactersWithAudio,
+      charactersWithoutAudio,
+      selectedCharacterId,
+      checkingAudio,
       goToHome,
       showConfirmDialog,
       confirmGenerate,
@@ -541,7 +666,10 @@ export default {
       isStoryGenerated,
       goToListen,
       currentTaskId,
-      pollingInterval
+      pollingInterval,
+      selectCharacter,
+      getSelectedCharacterName,
+      progressPercentage
     }
   }
 }
@@ -633,22 +761,50 @@ export default {
   color: #4b5563;
 }
 
-.character-info-section {
+.character-selector-section {
   margin-bottom: 24px;
 }
 
-.character-info {
+.character-selector {
   background: white;
   border-radius: 8px;
   padding: 16px;
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
 }
 
-.character-info-title {
+.character-selector-title {
   font-size: 16px;
   font-weight: 700;
   color: #1f2937;
   margin-bottom: 12px;
+}
+
+.no-available-character {
+  min-height: calc(100vh - 200px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.no-available-character-content {
+  text-align: center;
+  background: white;
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+}
+
+.no-available-character-content .message {
+  color: #4b5563;
+  margin-bottom: 8px;
+  font-size: 16px;
+}
+
+.no-available-character-content .sub-message {
+  color: #6b7280;
+  margin-bottom: 16px;
+  font-size: 14px;
 }
 
 .characters-list {
@@ -667,6 +823,11 @@ export default {
   border-radius: 6px;
   border: 2px solid transparent;
   transition: all 0.2s;
+  cursor: pointer;
+}
+
+.character-item:hover {
+  background: #f3f4f6;
 }
 
 .character-item.active {
@@ -684,6 +845,15 @@ export default {
   font-weight: 500;
 }
 
+.selected-badge {
+  background: #3b82f6;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .current-badge {
   background: #3b82f6;
   color: white;
@@ -697,6 +867,19 @@ export default {
   color: #6b7280;
   font-size: 14px;
   margin: 0;
+}
+
+.character-warning {
+  color: #f59e0b;
+  font-size: 14px;
+  margin: 12px 0 0 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.warning-icon {
+  font-size: 16px;
 }
 
 .content-container {
@@ -838,11 +1021,60 @@ export default {
   }
 }
 
-.progress-text {
-  font-size: 16px;
-  font-weight: 500;
-  color: #1f2937;
-  margin-bottom: 12px;
+.progress-bar-container {
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 24px;
+  background-color: #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+  margin-bottom: 8px;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(to right, #3b82f6, #6366f1);
+  border-radius: 12px;
+  transition: width 0.3s ease;
+  position: relative;
+}
+
+.progress-bar-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.progress-percentage {
+  font-size: 18px;
+  font-weight: 600;
+  color: #3b82f6;
+  text-align: center;
+  margin: 0;
 }
 
 .progress-hint {

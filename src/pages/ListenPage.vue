@@ -29,6 +29,14 @@
             <!-- 内容 -->
             <div class="task-info">
               <h3 class="task-title">{{ getStoryTitle(task.storyId) }}</h3>
+              <!-- 显示角色信息 -->
+              <div class="task-character">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+                <span class="character-name">{{ getCharacterName(task.roleId || task.characterId) }}</span>
+              </div>
               <div class="task-meta">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <circle cx="12" cy="12" r="10"></circle>
@@ -98,6 +106,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import store from '../store.js'
 import * as storyApi from '../api/story.js'
+import * as characterApi from '../api/character.js'
 import { getAudioUrl } from '../api/file.js'
 import { API_BASE_URL } from '../api/config.js'
 import { clearAuth } from '../utils/auth.js'
@@ -118,9 +127,34 @@ export default {
     const tasks = computed(() => store.state.userStoryBooks) // 使用用户故事书列表
     const stories = computed(() => store.state.stories)
     
+    // 加载所有角色列表（用于显示角色名称）
+    const allCharacters = ref([])
+    
+    // 获取角色名称
+    const getCharacterName = (roleId) => {
+      if (!roleId) return '未知角色'
+      const char = allCharacters.value.find(c => c.id === roleId)
+      return char ? char.name : `角色${roleId}`
+    }
+    
     // 加载任务列表和故事列表
     onMounted(async () => {
       try {
+        // 加载所有角色（用于显示角色名称）
+        try {
+          const characters = await characterApi.getCharacters()
+          if (characters && Array.isArray(characters)) {
+            allCharacters.value = characters
+          } else if (characters?.data && Array.isArray(characters.data)) {
+            allCharacters.value = characters.data
+          } else if (characters?.list && Array.isArray(characters.list)) {
+            allCharacters.value = characters.list
+          }
+        } catch (error) {
+          console.warn('加载角色列表失败:', error)
+          // 不影响主流程，继续执行
+        }
+        
         // 加载用户故事书列表
         await store.actions.loadUserStoryBooks()
         
@@ -267,11 +301,55 @@ export default {
         const audio = new Audio(audioUrl)
         audioElement.value = audio
         
+        // 确保音频不被静音
+        audio.muted = false
+        audio.volume = 1.0
+        
+        // 预加载设置
+        audio.preload = 'auto'
+        
+        console.log('创建音频元素:', audioUrl)
+        console.log('音频元素状态:', {
+          readyState: audio.readyState,
+          paused: audio.paused,
+          muted: audio.muted,
+          volume: audio.volume
+        })
+        
         // 等待元数据加载完成，获取音频时长
         audio.addEventListener('loadedmetadata', () => {
+          console.log('元数据加载完成:', {
+            duration: audio.duration,
+            readyState: audio.readyState
+          })
           if (audio.duration && isFinite(audio.duration)) {
             totalDuration.value = audio.duration
           }
+        })
+        
+        // 数据加载完成
+        audio.addEventListener('loadeddata', () => {
+          console.log('音频数据加载完成')
+        })
+        
+        // 可以开始播放
+        audio.addEventListener('canplay', () => {
+          console.log('音频可以播放')
+        })
+        
+        // 可以流畅播放
+        audio.addEventListener('canplaythrough', () => {
+          console.log('音频可以流畅播放')
+        })
+        
+        // 开始播放
+        audio.addEventListener('play', () => {
+          console.log('音频开始播放')
+        })
+        
+        // 暂停
+        audio.addEventListener('pause', () => {
+          console.log('音频暂停')
         })
         
         // 更新进度
@@ -287,6 +365,7 @@ export default {
         
         // 播放结束
         audio.addEventListener('ended', () => {
+          console.log('音频播放结束')
           playingTaskId.value = null
           playingProgress.value = 0
           currentTime.value = 0
@@ -301,8 +380,18 @@ export default {
         // 错误处理
         audio.addEventListener('error', (e) => {
           console.error('音频播放错误:', e, audio.error)
-          const errorMsg = audio.error ? `音频加载失败: ${audio.error.message || '未知错误'}` : '音频播放失败'
-          alert(errorMsg)
+          if (audio.error) {
+            const errorMessages = {
+              1: 'MEDIA_ERR_ABORTED - 用户中止',
+              2: 'MEDIA_ERR_NETWORK - 网络错误',
+              3: 'MEDIA_ERR_DECODE - 解码错误',
+              4: 'MEDIA_ERR_SRC_NOT_SUPPORTED - 格式不支持'
+            }
+            const errorMsg = errorMessages[audio.error.code] || `音频加载失败: ${audio.error.message || '未知错误'}`
+            alert(errorMsg)
+          } else {
+            alert('音频播放失败')
+          }
           playingTaskId.value = null
           playingProgress.value = 0
           currentTime.value = 0
@@ -320,18 +409,22 @@ export default {
           const onLoadedMetadata = () => {
             audio.removeEventListener('loadedmetadata', onLoadedMetadata)
             audio.removeEventListener('error', onError)
+            console.log('元数据加载完成，准备播放')
             if (audio.duration && isFinite(audio.duration)) {
               totalDuration.value = audio.duration
+              console.log('音频时长:', audio.duration, '秒')
             }
             resolve()
           }
           const onError = (e) => {
             audio.removeEventListener('loadedmetadata', onLoadedMetadata)
             audio.removeEventListener('error', onError)
+            console.error('加载元数据时出错:', e)
             reject(e)
           }
           if (audio.readyState >= 1) {
             // 元数据已加载
+            console.log('元数据已就绪，readyState:', audio.readyState)
             onLoadedMetadata()
           } else {
             audio.addEventListener('loadedmetadata', onLoadedMetadata)
@@ -343,12 +436,29 @@ export default {
                 audio.removeEventListener('error', onError)
                 reject(new Error('音频元数据加载超时'))
               }
-            }, 5000)
+            }, 10000) // 增加到10秒超时
           }
         })
         
         // 开始播放
-        await audio.play()
+        console.log('尝试播放音频...')
+        try {
+          const playPromise = audio.play()
+          if (playPromise !== undefined) {
+            await playPromise
+            console.log('音频播放成功')
+          } else {
+            console.log('play() 返回 undefined，可能已开始播放')
+          }
+        } catch (playError) {
+          console.error('播放失败:', playError)
+          // 如果是自动播放被阻止，提示用户
+          if (playError.name === 'NotAllowedError') {
+            alert('浏览器阻止了自动播放，请点击播放按钮')
+          } else {
+            throw playError
+          }
+        }
       } catch (error) {
         console.error('播放音频失败:', error)
         alert(`播放音频失败: ${error.message || '未知错误'}`)
@@ -383,7 +493,8 @@ export default {
       getStoryDuration,
       formatTime,
       isPlaying,
-      togglePlay
+      togglePlay,
+      getCharacterName
     }
   }
 }
@@ -509,6 +620,24 @@ export default {
 .task-duration {
   color: #6b7280;
   font-size: 12px;
+}
+
+.task-character {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
+.task-character svg {
+  color: #9ca3af;
+  flex-shrink: 0;
+}
+
+.character-name {
+  color: #6b7280;
+  font-weight: 500;
 }
 
 .status-tag {

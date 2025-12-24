@@ -95,11 +95,20 @@
         </div>
       </div>
     </div>
+
+    <!-- 上传加载遮罩层 -->
+    <div v-if="isUploading" class="upload-overlay">
+      <div class="upload-loading">
+        <div class="spinner"></div>
+        <p class="upload-text">正在上传...</p>
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
 import { ref, onUnmounted } from 'vue'
+import { verifyAudio } from '../api/asr.js'
 
 export default {
   name: 'RecordingPage',
@@ -123,6 +132,7 @@ export default {
     const audioUrl = ref(null)
     const mediaRecorder = ref(null)
     const audioChunks = ref([])
+    const isUploading = ref(false)
     let recordingInterval = null
     
     const startRecording = async () => {
@@ -164,7 +174,7 @@ export default {
       }
     }
     
-    const stopRecording = () => {
+    const stopRecording = async () => {
       if (mediaRecorder.value && mediaRecorder.value.state !== 'inactive') {
         mediaRecorder.value.stop()
       }
@@ -174,17 +184,71 @@ export default {
         clearInterval(recordingInterval)
       }
       
-      // 模拟ASR识别，80%概率识别正确
-      setTimeout(() => {
-        if (Math.random() > 0.2) {
-          recognizedText.value = RECORDING_TEXT
-          validationPassed.value = true
+      // 等待录音数据收集完成
+      // MediaRecorder的onstop事件会异步触发，我们需要等待audioBlob准备好
+      await new Promise((resolve) => {
+        if (audioBlob.value) {
+          resolve()
         } else {
-          recognizedText.value = '从前有座山，山里有座庙，庙里有个老和尚讲故事。'
+          // 如果audioBlob还没有准备好，等待一小段时间
+          const checkInterval = setInterval(() => {
+            if (audioBlob.value) {
+              clearInterval(checkInterval)
+              resolve()
+            }
+          }, 100)
+          
+          // 最多等待3秒
+          setTimeout(() => {
+            clearInterval(checkInterval)
+            resolve()
+          }, 3000)
+        }
+      })
+      
+      // 如果没有录音数据，直接返回
+      if (!audioBlob.value) {
+        alert('录音数据为空，请重新录音')
+        return
+      }
+      
+      // 显示上传和识别Loading
+      isUploading.value = true
+      
+      try {
+        // 创建文件对象
+        const file = new File([audioBlob.value], 'recording.webm', { type: 'audio/webm' })
+        
+        // 调用ASR校验API
+        const result = await verifyAudio(file, RECORDING_TEXT)
+        
+        // 更新识别结果
+        if (result.success && result.data) {
+          recognizedText.value = result.data.text || ''
+          validationPassed.value = result.data.passed || false
+          
+          // 如果相似度信息可用，可以在控制台输出（可选）
+          if (result.data.similarity !== undefined) {
+            console.log(`识别相似度: ${(result.data.similarity * 100).toFixed(2)}%`)
+          }
+        } else {
+          // API返回失败
+          recognizedText.value = '识别失败，请重试'
           validationPassed.value = false
         }
+        
         hasRecording.value = true
-      }, 1500)
+      } catch (error) {
+        console.error('ASR校验失败:', error)
+        // 显示错误信息
+        recognizedText.value = `识别失败: ${error.message || '网络错误，请检查网络连接后重试'}`
+        validationPassed.value = false
+        hasRecording.value = true
+        alert(`识别失败: ${error.message || '网络错误，请检查网络连接后重试'}`)
+      } finally {
+        // 隐藏Loading
+        isUploading.value = false
+      }
     }
     
     const playRecording = () => {
@@ -228,16 +292,28 @@ export default {
       }
       
       try {
+        // 显示上传loading
+        isUploading.value = true
+        
         // 创建文件对象，但不在这里上传
         // 上传将在父组件中统一处理，避免重复上传
         const file = new File([audioBlob.value], 'recording.webm', { type: 'audio/webm' })
         
         // 直接通知父组件，由父组件负责上传
-        emit('complete', props.characterName, file)
+        // 传递一个回调函数，让父组件在上传完成后调用
+        emit('complete', props.characterName, file, () => {
+          isUploading.value = false
+        })
       } catch (error) {
         console.error('处理录音失败:', error)
+        isUploading.value = false
         alert('处理录音失败，请重试')
       }
+    }
+    
+    // 暴露关闭loading的方法，供父组件调用
+    const closeUploading = () => {
+      isUploading.value = false
     }
     
     const formatTime = (seconds) => {
@@ -271,12 +347,14 @@ export default {
       isPlaying,
       validationPassed,
       recognizedText,
+      isUploading,
       startRecording,
       stopRecording,
       playRecording,
       retry,
       next,
-      formatTime
+      formatTime,
+      closeUploading
     }
   }
 }
@@ -414,6 +492,53 @@ export default {
   border-radius: 12px;
 }
 
+/* 上传加载遮罩层 */
+.upload-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.upload-loading {
+  background: white;
+  border-radius: 12px;
+  padding: 32px 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #e5e7eb;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.upload-text {
+  color: #374151;
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0;
+}
+
 /* 响应式设计 */
 @media (min-width: 768px) {
   .recording-page {
@@ -476,6 +601,20 @@ export default {
   
   .action-buttons .btn {
     padding: 24px;
+    font-size: 18px;
+  }
+  
+  .upload-loading {
+    padding: 40px 60px;
+  }
+  
+  .spinner {
+    width: 48px;
+    height: 48px;
+    border-width: 5px;
+  }
+  
+  .upload-text {
     font-size: 18px;
   }
 }
