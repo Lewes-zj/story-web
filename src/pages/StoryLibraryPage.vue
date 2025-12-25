@@ -150,6 +150,37 @@
         </div>
       </div>
     </div>
+
+    <!-- 结果弹窗（成功/失败） -->
+    <div v-if="showResultDialog" class="dialog-overlay" @click="showResultDialog = false">
+      <div class="dialog-content result-dialog" @click.stop>
+        <div class="dialog-header">
+          <h3 class="dialog-title" :class="resultDialogType === 'success' ? 'success-title' : 'error-title'">
+            {{ resultDialogType === 'success' ? '✅ 生成成功' : '❌ 生成失败' }}
+          </h3>
+        </div>
+        <div class="dialog-body">
+          <p class="result-message" :class="resultDialogType === 'success' ? 'success-message' : 'error-message'">
+            {{ resultDialogMessage }}
+          </p>
+        </div>
+        <div class="dialog-actions">
+          <button 
+            class="btn btn-primary" 
+            @click="showResultDialog = false"
+          >
+            确定
+          </button>
+          <button 
+            v-if="resultDialogType === 'success'"
+            class="btn btn-secondary" 
+            @click="goToListeningPage"
+          >
+            前往畅听页面
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -180,6 +211,11 @@ export default {
     const currentTaskId = ref(null)
     const pollingInterval = ref(null)
     const progressPercentage = ref(0)
+    
+    // 成功/失败弹窗状态
+    const showResultDialog = ref(false)
+    const resultDialogType = ref('success') // 'success' | 'error'
+    const resultDialogMessage = ref('')
     
     const character = computed(() => store.state.character)
     const stories = computed(() => store.state.stories)
@@ -384,6 +420,10 @@ export default {
     }
 
     // 跳转到畅听页面播放
+    const goToListeningPage = () => {
+      router.push('/listening')
+    }
+    
     const goToListen = (storyId) => {
       const task = getGeneratedTask(storyId)
       if (task) {
@@ -525,29 +565,42 @@ export default {
         // 检查是否完成或失败
         if (taskStatus.status === 'completed') {
           console.log('任务完成！')
-          stopTaskPolling()
-          clearTaskFromStorage()
-          showGeneratingDialog.value = false
-          generatingProgress.value = ''
-          progressPercentage.value = 0
           
-          alert('生成成功！请前往畅听页面查看')
+          // 先设置进度为100%，让用户看到完成状态
+          progressPercentage.value = 100
           
-          // 刷新用户故事书列表
-          try {
-            await store.actions.loadUserStoryBooks()
-          } catch (error) {
-            console.error('刷新故事书列表失败:', error)
-          }
+          // 延迟一下再关闭进度弹窗并显示成功弹窗
+          setTimeout(() => {
+            stopTaskPolling()
+            clearTaskFromStorage()
+            showGeneratingDialog.value = false
+            generatingProgress.value = ''
+            
+            // 显示成功弹窗
+            resultDialogType.value = 'success'
+            resultDialogMessage.value = '生成成功！请前往畅听页面查看'
+            showResultDialog.value = true
+            
+            // 刷新用户故事书列表
+            store.actions.loadUserStoryBooks().catch(error => {
+              console.error('刷新故事书列表失败:', error)
+            })
+          }, 500) // 延迟500ms，让用户看到100%的进度
+          
         } else if (taskStatus.status === 'failed') {
           console.error('任务失败:', taskStatus.error)
+          
+          // 停止轮询和清理
           stopTaskPolling()
           clearTaskFromStorage()
           showGeneratingDialog.value = false
           generatingProgress.value = ''
           progressPercentage.value = 0
           
-          alert(`生成失败: ${taskStatus.error || '未知错误'}`)
+          // 显示失败弹窗
+          resultDialogType.value = 'error'
+          resultDialogMessage.value = taskStatus.error || '未知错误'
+          showResultDialog.value = true
         }
       } catch (error) {
         console.error('轮询任务状态失败:', error)
@@ -560,7 +613,11 @@ export default {
           showGeneratingDialog.value = false
           generatingProgress.value = ''
           progressPercentage.value = 0
-          alert('任务已不存在，可能已被删除')
+          
+          // 显示错误弹窗
+          resultDialogType.value = 'error'
+          resultDialogMessage.value = '任务已不存在，可能已被删除'
+          showResultDialog.value = true
         }
         // 其他错误继续轮询，可能是网络问题
       }
@@ -665,10 +722,14 @@ export default {
       showGeneratingDialog,
       isStoryGenerated,
       goToListen,
+      goToListeningPage,
       currentTaskId,
       pollingInterval,
       selectCharacter,
       getSelectedCharacterName,
+      showResultDialog,
+      resultDialogType,
+      resultDialogMessage,
       progressPercentage
     }
   }
@@ -1082,6 +1143,50 @@ export default {
   color: #6b7280;
   margin-top: 16px;
   line-height: 1.5;
+}
+
+/* 结果弹窗样式 */
+.result-dialog {
+  max-width: 400px;
+}
+
+.success-title {
+  color: #10b981;
+}
+
+.error-title {
+  color: #ef4444;
+}
+
+.result-message {
+  font-size: 16px;
+  line-height: 1.6;
+  text-align: center;
+  padding: 20px 0;
+  margin: 0;
+}
+
+.success-message {
+  color: #059669;
+}
+
+.error-message {
+  color: #dc2626;
+}
+
+.result-dialog .dialog-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.result-dialog .dialog-actions .btn-secondary {
+  background-color: #6b7280;
+  color: white;
+}
+
+.result-dialog .dialog-actions .btn-secondary:hover {
+  background-color: #4b5563;
 }
 
 /* 响应式设计 */
