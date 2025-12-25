@@ -14,69 +14,80 @@
         <p class="empty-subtext">前往故事库开始生成吧</p>
       </div>
       
-      <div v-else class="tasks-list">
+      <div v-else class="tasks-grouped">
         <div 
-          v-for="task in tasks" 
-          :key="task.id"
-          class="task-card"
+          v-for="group in groupedTasks" 
+          :key="group.roleId || 'unknown'"
+          class="character-group"
         >
-          <div class="task-content">
-            <!-- 封面 -->
-            <div class="task-cover">
-              <span class="cover-icon">📖</span>
-            </div>
-
-            <!-- 内容 -->
-            <div class="task-info">
-              <h3 class="task-title">{{ getStoryTitle(task.storyId) }}</h3>
-              <!-- 显示角色信息 -->
-              <div class="task-character">
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                  <circle cx="12" cy="7" r="4"></circle>
-                </svg>
-                <span class="character-name">{{ getCharacterName(task.roleId) }}</span>
-              </div>
-              <div class="task-meta">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <polyline points="12 6 12 12 16 14"></polyline>
-                </svg>
-                <span class="task-duration">{{ getStoryDuration(task.storyId) }}</span>
-              </div>
-              <div class="task-status">
-                <!-- 移除状态标签，因为现在只显示已生成的故事 -->
-              </div>
-            </div>
-
-            <!-- 播放按钮 -->
-            <div class="play-button-container">
-              <button 
-                class="play-button"
-                :class="{ playing: isPlaying(task.id) }"
-                @click="togglePlay(task.id)"
-                :disabled="isPlayingLoading"
-              >
-                <svg v-if="!isPlaying(task.id)" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                </svg>
-                <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="6" y="4" width="4" height="16"></rect>
-                  <rect x="14" y="4" width="4" height="16"></rect>
-                </svg>
-              </button>
+          <!-- 角色分组标题 -->
+          <div class="group-header">
+            <div class="group-title">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+              <span class="group-name">{{ group.characterName }}</span>
+              <span class="group-count">({{ group.tasks.length }})</span>
             </div>
           </div>
 
-          <!-- 进度条 -->
-          <div v-if="isPlaying(task.id)" class="progress-container">
-            <div class="progress-bar">
-              <div 
-                class="progress-fill"
-                :style="{ width: playingProgress + '%' }"
-              ></div>
+          <!-- 该角色下的任务列表 -->
+          <div class="tasks-list">
+            <div 
+              v-for="task in group.tasks" 
+              :key="task.id"
+              :data-task-id="task.id"
+              class="task-card"
+            >
+              <div class="task-content">
+                <!-- 封面 -->
+                <div class="task-cover">
+                  <span class="cover-icon">📖</span>
+                </div>
+
+                <!-- 内容 -->
+                <div class="task-info">
+                  <h3 class="task-title">{{ getStoryTitle(task.storyId) }}</h3>
+                  <div class="task-meta">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                    <span class="task-duration">{{ getStoryDuration(task.storyId) }}</span>
+                  </div>
+                </div>
+
+                <!-- 播放按钮 -->
+                <div class="play-button-container">
+                  <button 
+                    class="play-button"
+                    :class="{ playing: isPlaying(task.id) }"
+                    @click="togglePlay(task.id)"
+                    :disabled="isPlayingLoading"
+                  >
+                    <svg v-if="!isPlaying(task.id)" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    </svg>
+                    <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="6" y="4" width="4" height="16"></rect>
+                      <rect x="14" y="4" width="4" height="16"></rect>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <!-- 进度条 -->
+              <div v-if="isPlaying(task.id)" class="progress-container">
+                <div class="progress-bar">
+                  <div 
+                    class="progress-fill"
+                    :style="{ width: playingProgress + '%' }"
+                  ></div>
+                </div>
+                <p class="progress-text">{{ formatTime(currentTime) }} / {{ formatTime(totalDuration) }}</p>
+              </div>
             </div>
-            <p class="progress-text">{{ formatTime(currentTime) }} / {{ formatTime(totalDuration) }}</p>
           </div>
         </div>
       </div>
@@ -148,6 +159,44 @@ export default {
       return '未知角色'
     }
     
+    // 按角色分组任务
+    const groupedTasks = computed(() => {
+      if (!tasks.value || tasks.value.length === 0) {
+        return []
+      }
+      
+      // 使用 Map 来分组
+      const groupsMap = new Map()
+      
+      tasks.value.forEach(task => {
+        const roleId = task.roleId || 'unknown'
+        const roleIdStr = String(roleId)
+        const characterName = getCharacterName(roleId)
+        
+        if (!groupsMap.has(roleIdStr)) {
+          groupsMap.set(roleIdStr, {
+            roleId: roleId,
+            characterName: characterName,
+            tasks: []
+          })
+        }
+        
+        groupsMap.get(roleIdStr).tasks.push(task)
+      })
+      
+      // 转换为数组并按角色名称排序
+      const groups = Array.from(groupsMap.values())
+      
+      // 按角色名称排序，"未知角色"排在最后
+      groups.sort((a, b) => {
+        if (a.characterName === '未知角色') return 1
+        if (b.characterName === '未知角色') return -1
+        return a.characterName.localeCompare(b.characterName, 'zh-CN')
+      })
+      
+      return groups
+    })
+    
     // 加载任务列表和故事列表
     onMounted(async () => {
       try {
@@ -190,9 +239,10 @@ export default {
               togglePlay(taskId)
               
               // 滚动到对应的任务卡片
-              // 这里我们简单处理，如果能获取到元素的话
-              // const el = document.getElementById(`task-${taskId}`)
-              // if (el) el.scrollIntoView({ behavior: 'smooth' })
+              const el = document.querySelector(`[data-task-id="${taskId}"]`)
+              if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+              }
             }, 500)
           }
         }
@@ -512,6 +562,7 @@ export default {
     return {
       character,
       tasks,
+      groupedTasks,
       playingTaskId,
       playingProgress,
       currentTime,
@@ -582,6 +633,46 @@ export default {
 
 .empty-subtext {
   color: #6b7280;
+  font-size: 14px;
+}
+
+.tasks-grouped {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.character-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.group-header {
+  padding: 0 4px;
+}
+
+.group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.group-title svg {
+  color: #3b82f6;
+  flex-shrink: 0;
+}
+
+.group-name {
+  color: #1f2937;
+}
+
+.group-count {
+  color: #6b7280;
+  font-weight: 400;
   font-size: 14px;
 }
 

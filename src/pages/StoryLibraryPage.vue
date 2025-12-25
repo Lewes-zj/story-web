@@ -152,31 +152,46 @@
     </div>
 
     <!-- 结果弹窗（成功/失败） -->
-    <div v-if="showResultDialog" class="dialog-overlay" @click="showResultDialog = false">
+    <div v-if="showResultDialog" class="dialog-overlay result-dialog-overlay" @click="showResultDialog = false">
       <div class="dialog-content result-dialog" @click.stop>
-        <div class="dialog-header">
-          <h3 class="dialog-title" :class="resultDialogType === 'success' ? 'success-title' : 'error-title'">
-            {{ resultDialogType === 'success' ? '✅ 生成成功' : '❌ 生成失败' }}
+        <div class="result-dialog-header">
+          <div class="result-icon-wrapper" :class="resultDialogType === 'success' ? 'success-icon' : 'error-icon'">
+            <svg v-if="resultDialogType === 'success'" xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+              <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+            <svg v-else xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+          </div>
+          <h3 class="result-dialog-title" :class="resultDialogType === 'success' ? 'success-title' : 'error-title'">
+            {{ resultDialogType === 'success' ? '生成成功' : '生成失败' }}
           </h3>
         </div>
-        <div class="dialog-body">
+        <div class="result-dialog-body">
           <p class="result-message" :class="resultDialogType === 'success' ? 'success-message' : 'error-message'">
             {{ resultDialogMessage }}
           </p>
         </div>
-        <div class="dialog-actions">
-          <button 
-            class="btn btn-primary" 
-            @click="showResultDialog = false"
-          >
-            确定
-          </button>
+        <div class="result-dialog-actions">
           <button 
             v-if="resultDialogType === 'success'"
-            class="btn btn-secondary" 
+            class="btn btn-primary result-btn-primary" 
             @click="goToListeningPage"
           >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
             前往畅听页面
+          </button>
+          <button 
+            class="btn" 
+            :class="resultDialogType === 'success' ? 'btn-outline' : 'btn-primary'"
+            @click="showResultDialog = false"
+          >
+            {{ resultDialogType === 'success' ? '稍后查看' : '确定' }}
           </button>
         </div>
       </div>
@@ -431,7 +446,8 @@ export default {
 
     // 跳转到畅听页面播放
     const goToListeningPage = () => {
-      router.push('/listening')
+      showResultDialog.value = false
+      router.push('/listen')
     }
     
     const goToListen = (storyId) => {
@@ -1157,24 +1173,95 @@ export default {
 }
 
 /* 结果弹窗样式 */
+.result-dialog-overlay {
+  backdrop-filter: blur(4px);
+  background-color: rgba(0, 0, 0, 0.6);
+}
+
 .result-dialog {
-  max-width: 400px;
+  max-width: 420px;
+  border-radius: 16px;
+  overflow: hidden;
+  animation: slideUp 0.3s ease-out;
 }
 
-.success-title {
-  color: #10b981;
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
-.error-title {
-  color: #ef4444;
+.result-dialog-header {
+  padding: 32px 24px 16px;
+  text-align: center;
+  background: linear-gradient(to bottom, #f9fafb, #ffffff);
+}
+
+.result-icon-wrapper {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: scaleIn 0.4s ease-out 0.1s both;
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.result-icon-wrapper.success-icon {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  box-shadow: 0 8px 16px rgba(16, 185, 129, 0.3);
+}
+
+.result-icon-wrapper.error-icon {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: white;
+  box-shadow: 0 8px 16px rgba(239, 68, 68, 0.3);
+}
+
+.result-dialog-title {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0;
+  color: #1f2937;
+}
+
+.result-dialog-title.success-title {
+  color: #059669;
+}
+
+.result-dialog-title.error-title {
+  color: #dc2626;
+}
+
+.result-dialog-body {
+  padding: 8px 24px 24px;
+  text-align: center;
 }
 
 .result-message {
   font-size: 16px;
   line-height: 1.6;
-  text-align: center;
-  padding: 20px 0;
+  padding: 0;
   margin: 0;
+  color: #4b5563;
 }
 
 .success-message {
@@ -1185,19 +1272,52 @@ export default {
   color: #dc2626;
 }
 
-.result-dialog .dialog-actions {
+.result-dialog-actions {
   display: flex;
   gap: 12px;
+  padding: 0 24px 24px;
+  flex-direction: column;
+}
+
+.result-dialog-actions .btn {
+  padding: 14px 20px;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 10px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
   justify-content: center;
+  gap: 8px;
 }
 
-.result-dialog .dialog-actions .btn-secondary {
-  background-color: #6b7280;
+.result-btn-primary {
+  background: linear-gradient(135deg, #3b82f6, #6366f1);
   color: white;
+  border: none;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
 }
 
-.result-dialog .dialog-actions .btn-secondary:hover {
-  background-color: #4b5563;
+.result-btn-primary:hover {
+  background: linear-gradient(135deg, #2563eb, #4f46e5);
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+  transform: translateY(-1px);
+}
+
+.result-btn-primary:active {
+  transform: translateY(0);
+}
+
+.result-dialog-actions .btn-outline {
+  background: white;
+  color: #6b7280;
+  border: 2px solid #e5e7eb;
+}
+
+.result-dialog-actions .btn-outline:hover {
+  background: #f9fafb;
+  border-color: #d1d5db;
+  color: #374151;
 }
 
 /* 响应式设计 */
@@ -1275,6 +1395,18 @@ export default {
   
   .dialog-actions {
     flex-direction: row;
+  }
+  
+  .result-dialog {
+    max-width: 480px;
+  }
+  
+  .result-dialog-actions {
+    flex-direction: row;
+  }
+  
+  .result-dialog-actions .btn {
+    flex: 1;
   }
 }
 
