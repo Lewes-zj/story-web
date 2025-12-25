@@ -407,16 +407,26 @@ export default {
       return story ? story.title : ''
     })
 
-    // 获取已生成的故事书任务
-    const getGeneratedTask = (storyId) => {
+    // 获取已生成的故事书任务（需要同时匹配storyId和roleId）
+    const getGeneratedTask = (storyId, roleId = null) => {
       if (!userStoryBooks.value) return null
-      // 注意：确保ID类型一致，storyId可能是数字或字符串
-      return userStoryBooks.value.find(book => String(book.storyId) === String(storyId))
+      
+      // 如果没有指定roleId，使用当前选中的角色ID
+      const targetRoleId = roleId || selectedCharacterId.value
+      if (!targetRoleId) return null
+      
+      // 注意：确保ID类型一致，storyId和roleId可能是数字或字符串
+      return userStoryBooks.value.find(book => 
+        String(book.storyId) === String(storyId) && 
+        String(book.roleId) === String(targetRoleId)
+      )
     }
 
-    // 判断故事是否已生成
+    // 判断故事是否已生成（针对当前选中的角色）
     const isStoryGenerated = (storyId) => {
-      return !!getGeneratedTask(storyId)
+      // 如果没有选中角色，返回false
+      if (!selectedCharacterId.value) return false
+      return !!getGeneratedTask(storyId, selectedCharacterId.value)
     }
 
     // 跳转到畅听页面播放
@@ -425,7 +435,8 @@ export default {
     }
     
     const goToListen = (storyId) => {
-      const task = getGeneratedTask(storyId)
+      // 使用当前选中的角色ID来查找任务
+      const task = getGeneratedTask(storyId, selectedCharacterId.value)
       if (task) {
         router.push({ path: '/listen', query: { playTaskId: task.id } })
       }

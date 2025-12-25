@@ -35,7 +35,7 @@
                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                   <circle cx="12" cy="7" r="4"></circle>
                 </svg>
-                <span class="character-name">{{ getCharacterName(task.roleId || task.characterId) }}</span>
+                <span class="character-name">{{ getCharacterName(task.roleId) }}</span>
               </div>
               <div class="task-meta">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -135,8 +135,17 @@ export default {
     // 获取角色名称
     const getCharacterName = (roleId) => {
       if (!roleId) return '未知角色'
-      const char = allCharacters.value.find(c => c.id === roleId)
-      return char ? char.name : `角色${roleId}`
+      
+      // 确保 ID 类型一致（都转换为字符串进行比较）
+      const targetRoleId = String(roleId)
+      const char = allCharacters.value.find(c => String(c.id) === targetRoleId)
+      
+      if (char && char.name) {
+        return char.name
+      }
+      
+      // 如果找不到，返回默认值（不显示角色ID）
+      return '未知角色'
     }
     
     // 加载任务列表和故事列表
@@ -145,15 +154,21 @@ export default {
         // 加载所有角色（用于显示角色名称）
         try {
           const characters = await characterApi.getCharacters()
+          let characterList = []
+          
           if (characters && Array.isArray(characters)) {
-            allCharacters.value = characters
+            characterList = characters
           } else if (characters?.data && Array.isArray(characters.data)) {
-            allCharacters.value = characters.data
+            characterList = characters.data
           } else if (characters?.list && Array.isArray(characters.list)) {
-            allCharacters.value = characters.list
+            characterList = characters.list
           }
+          
+          allCharacters.value = characterList
+          console.log('已加载角色列表:', characterList.length, '个角色')
         } catch (error) {
           console.warn('加载角色列表失败:', error)
+          allCharacters.value = []
           // 不影响主流程，继续执行
         }
         

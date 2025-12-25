@@ -274,10 +274,10 @@ export default {
         }
         
         // 创建角色，传递fileId（如果已上传）
-        const character = await characterApi.createCharacter(name, fileId)
+        const createdCharacter = await characterApi.createCharacter(name, fileId)
         
         // 如果返回的是对象，直接使用；如果是数组，取第一个
-        const characterData = Array.isArray(character) ? character[0] : character
+        const characterData = Array.isArray(createdCharacter) ? createdCharacter[0] : createdCharacter
         
         // 刷新角色列表
         await loadUserCharacters()
