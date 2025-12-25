@@ -35,6 +35,7 @@
               <button 
                 class="btn btn-primary stop-btn"
                 @click="stopRecording"
+                :disabled="isUploading"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <rect x="6" y="6" width="12" height="12" rx="2" ry="2"></rect>
@@ -80,12 +81,13 @@
               <button 
                 class="btn btn-outline retry-btn"
                 @click="retry"
+                :disabled="isUploading"
               >
                 重新录音
               </button>
               <button 
                 class="btn btn-primary next-btn"
-                :disabled="!validationPassed"
+                :disabled="!validationPassed || isUploading"
                 @click="next"
               >
                 下一步
@@ -175,6 +177,12 @@ export default {
     }
     
     const stopRecording = async () => {
+      // 防止重复提交
+      if (isUploading.value) {
+        console.log('正在处理中，请勿重复提交')
+        return
+      }
+      
       if (mediaRecorder.value && mediaRecorder.value.state !== 'inactive') {
         mediaRecorder.value.stop()
       }
@@ -287,6 +295,12 @@ export default {
     }
     
     const next = async () => {
+      // 防止重复提交
+      if (isUploading.value) {
+        console.log('正在处理中，请勿重复提交')
+        return
+      }
+      
       if (!validationPassed.value || !audioBlob.value) {
         return
       }

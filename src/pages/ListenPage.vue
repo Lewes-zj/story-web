@@ -55,6 +55,7 @@
                 class="play-button"
                 :class="{ playing: isPlaying(task.id) }"
                 @click="togglePlay(task.id)"
+                :disabled="isPlayingLoading"
               >
                 <svg v-if="!isPlaying(task.id)" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polygon points="5 3 19 12 5 21 5 3"></polygon>
@@ -121,6 +122,7 @@ export default {
     const audioElement = ref(null)
     const currentTime = ref(0)
     const totalDuration = ref(0)
+    const isPlayingLoading = ref(false)
     let progressInterval = null
     
     const character = computed(() => store.state.character)
@@ -240,6 +242,12 @@ export default {
     }
     
     const togglePlay = async (taskId) => {
+      // 防止重复点击
+      if (isPlayingLoading.value) {
+        console.log('正在处理中，请稍候')
+        return
+      }
+      
       const task = tasks.value.find(t => t.id === taskId)
       if (!task) return
       
@@ -272,6 +280,7 @@ export default {
       
       // 开始播放新任务
       try {
+        isPlayingLoading.value = true
         // 获取音频URL（优先使用后端返回的 outputUrl，其次 storyBookPath/audioUrl）
         const cleanBaseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL
         const toAbsolute = (p) => {
@@ -294,6 +303,7 @@ export default {
         
         if (!audioUrl) {
           alert('音频文件不存在')
+          isPlayingLoading.value = false
           return
         }
         
@@ -458,6 +468,8 @@ export default {
           } else {
             throw playError
           }
+        } finally {
+          isPlayingLoading.value = false
         }
       } catch (error) {
         console.error('播放音频失败:', error)
@@ -467,6 +479,7 @@ export default {
         currentTime.value = 0
         totalDuration.value = 0
         audioElement.value = null
+        isPlayingLoading.value = false
       }
     }
     
@@ -494,7 +507,8 @@ export default {
       formatTime,
       isPlaying,
       togglePlay,
-      getCharacterName
+      getCharacterName,
+      isPlayingLoading
     }
   }
 }
@@ -686,6 +700,11 @@ export default {
 
 .play-button.playing:hover {
   background: #b91c1c;
+}
+
+.play-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .progress-container {

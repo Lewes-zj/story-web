@@ -36,7 +36,7 @@
           <button class="btn btn-primary add-character-btn" @click="showNameDialog = true">
             + 添加角色
           </button>
-          <button class="btn btn-outline logout-btn" @click="handleLogout">
+          <button class="btn btn-outline logout-btn" @click="handleLogout" :disabled="loading">
             退出登录
           </button>
         </div>
@@ -68,8 +68,8 @@
               @keyup.enter="handleLogin" />
           </div>
           <div class="dialog-actions">
-            <button class="btn btn-outline" @click="closeLoginDialog">取消</button>
-            <button class="btn btn-primary" @click="handleLogin">登录</button>
+            <button class="btn btn-outline" @click="closeLoginDialog" :disabled="loading">取消</button>
+            <button class="btn btn-primary" @click="handleLogin" :disabled="loading">登录</button>
           </div>
           <div class="auth-toggle">
             <button class="text-btn" @click="closeLoginDialog(); showRegister = true">
@@ -109,8 +109,8 @@
               @keyup.enter="handleRegister" />
           </div>
           <div class="dialog-actions">
-            <button class="btn btn-outline" @click="closeRegisterDialog">取消</button>
-            <button class="btn btn-primary" @click="handleRegister">注册</button>
+            <button class="btn btn-outline" @click="closeRegisterDialog" :disabled="loading">取消</button>
+            <button class="btn btn-primary" @click="handleRegister" :disabled="loading">注册</button>
           </div>
           <div class="auth-toggle">
             <button class="text-btn" @click="closeRegisterDialog(); showLogin = true">
@@ -236,6 +236,12 @@ export default {
     }
 
     const handleRecordingComplete = async (name, audioFile, closeLoadingCallback) => {
+      // 防止重复提交
+      if (loading.value) {
+        console.log('正在处理中，请勿重复提交')
+        return
+      }
+      
       try {
         loading.value = true
         errorMessage.value = ''
@@ -306,7 +312,14 @@ export default {
     
     // 退出登录
     const handleLogout = async () => {
+      // 防止重复提交
+      if (loading.value) {
+        console.log('正在处理中，请勿重复提交')
+        return
+      }
+      
       try {
+        loading.value = true
         await authApi.logout()
       } catch (error) {
         console.error('退出登录失败:', error)
@@ -314,6 +327,7 @@ export default {
         clearAuth()
         store.actions.setUser(null)
         store.actions.setCharacter(null)
+        loading.value = false
       }
     }
     
@@ -356,6 +370,12 @@ export default {
 
     // 登录处理
     const handleLogin = async () => {
+      // 防止重复提交
+      if (loading.value) {
+        console.log('正在处理中，请勿重复提交')
+        return
+      }
+      
       // 验证用户名
       const usernameError = validateInput(loginForm.value.username, '用户名')
       if (usernameError) {
@@ -404,6 +424,12 @@ export default {
     
     // 注册处理
     const handleRegister = async () => {
+      // 防止重复提交
+      if (loading.value) {
+        console.log('正在处理中，请勿重复提交')
+        return
+      }
+      
       // 验证用户名
       const usernameError = validateInput(registerForm.value.username, '用户名')
       if (usernameError) {
