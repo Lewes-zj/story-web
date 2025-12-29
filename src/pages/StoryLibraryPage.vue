@@ -386,7 +386,7 @@ export default {
         try {
           const audioInfo = await characterApi.getCharacterAudio(char.id)
           // 如果tts_voice或cosy_voice存在，说明有录音（优先使用tts_voice）
-          if (audioInfo && (audioInfo.tts_voice || audioInfo.cosy_voice)) {
+          if (audioInfo && audioInfo.clean_input) {
             charactersWithAudio.value.push(char)
           } else {
             charactersWithoutAudio.value.push(char)
