@@ -377,6 +377,7 @@ export default {
     })
     
     // 检查角色是否有录音
+    // 只要 clean_input 有值就可以生成故事，因为后端会在生成任务时自动执行步骤2和步骤3
     const checkCharactersAudio = async (characters) => {
       checkingAudio.value = true
       charactersWithAudio.value = []
@@ -385,7 +386,8 @@ export default {
       for (const char of characters) {
         try {
           const audioInfo = await characterApi.getCharacterAudio(char.id)
-          // 如果tts_voice或cosy_voice存在，说明有录音（优先使用tts_voice）
+          // 只要 clean_input 有值就可以生成故事
+          // 后端会在生成任务时自动执行步骤2（CosyVoice V3）和步骤3（AutoVoiceCloner）
           if (audioInfo && audioInfo.clean_input) {
             charactersWithAudio.value.push(char)
           } else {
